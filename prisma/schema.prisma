@@ -1,14 +1,256 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
-generator client {
-  provider = "prisma-client"
-  //output   = "../generated/prisma"
-}
-
+// ---------------------------------------------------------
+// Configuración de conexión a PostgreSQL
+// ---------------------------------------------------------
 datasource db {
   provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ---------------------------------------------------------
+// ENUMS
+// ---------------------------------------------------------
+enum TipoPersona {
+  MADRE
+  PADRE
+  TUTOR
+  FUNCIONARIO
+  TRABAJADOR_SOCIAL
+}
+
+enum TipoSolicitud {
+  TRABAJADOR
+  ESTUDIANTE
+  CASO_SOCIAL
+}
+
+enum SectorPrioridad {
+  SALUD
+  EDUCACION
+  DEFENSA
+  CASO_SOCIAL
+  OTRO
+}
+
+enum EstadoSolicitud {
+  RECIBIDA
+  EN_REVISION
+  APROBADA
+  RECHAZADA
+  EN_ESPERA
+}
+
+enum TipoDocumento {
+  CARNET
+  TARJETA_MENOR
+  CARTA_LABORAL
+  CARTA_ESTUDIO
+  INFORME_SOCIAL
+}
+
+enum VinculoLaboral {
+  ACTIVO
+  ESTUDIANTE
+  PERDIDO
+}
+
+enum TipoCirculo {
+  NORMAL
+  ESPECIAL
+  MIXTO
+}
+
+enum ResultadoDecision {
+  ACEPTADA
+  DENEGADA
+}
+
+enum EstadoMatricula {
+  ACTIVA
+  VENCIDA
+  CANCELADA
+}
+
+// ---------------------------------------------------------
+// MODELOS
+// ---------------------------------------------------------
+model Tutor {
+  id              String              @id @default(uuid())
+  nombre          String
+  apellidos       String
+  carnetIdentidad String              @unique
+  telefono        String?
+  email           String?
+  direccion       String?
+  tipoPersona     TipoPersona
+  activo          Boolean             @default(true)
+  cantHijo        Int                 @default(1)
+
+  hijos           Nino[]              @relation("Padres")
+  solicitudes     Solicitud[]         @relation("TutorSolicitudes")
+  documentosVal   DocumentoSolicitud[] @relation("Validador")
+  trazas          Trazabilidad[]
+
+  controles       ControlTrimestral[]
+}
+
+
+model Nino {
+  id              String   @id @default(uuid())
+  nombre          String
+  apellidos       String
+  fechaNacimiento DateTime
+  sexo            String
+  tarjetaMenor    String   @unique
+  tutorId         String
+
+  tutor           Tutor?   @relation("Padres", fields: [tutorId], references: [id])
+  casoEspecial    Boolean  @default(false)
+  tipoNecesidad   String?
+  solicitud       Solicitud?
+}
+
+model CirculoInfantil {
+  id              String             @id @default(uuid())
+  nombre          String
+  direccion       String
+  municipio       String
+  capacidadTotal  Int
+  tipo            TipoCirculo
+  activo          Boolean            @default(true)
+
+  capacidades     CapacidadCirculo[]
+  matriculas      Matricula[]
+}
+
+model PeriodoOtorgamiento {
+  id              String             @id @default(uuid())
+  nombre          String
+  fechaInicio     DateTime
+  fechaCierre     DateTime
+  fechaAsignacion DateTime
+
+  solicitudes     Solicitud[]
+  capacidades     CapacidadCirculo[]
+  sesiones        SesionComision[]
+}
+
+model CapacidadCirculo {
+  id          String           @id @default(uuid())
+  idCirculo   String
+  idPeriodo   String
+  cuposDisponibles Int
+  cuposOcupados   Int
+
+  circulo     CirculoInfantil  @relation(fields: [idCirculo], references: [id])
+  periodo     PeriodoOtorgamiento @relation(fields: [idPeriodo], references: [id])
+
+  @@unique([idCirculo, idPeriodo])
+}
+
+model Solicitud {
+  id              String             @id @default(uuid())
+  ninoId          String             @unique
+  tutorId         String
+  fechaSolicitud  DateTime           @default(now())
+  sector          SectorPrioridad
+  tipoSolicitud   TipoSolicitud
+  estado          EstadoSolicitud
+  periodoId       String
+  numeroRegistro  String
+  observaciones   String?
+
+  nino            Nino               @relation(fields: [ninoId], references: [id])
+  tutor           Tutor              @relation("TutorSolicitudes", fields: [tutorId], references: [id])
+  periodo         PeriodoOtorgamiento @relation(fields: [periodoId], references: [id])
+  documentos      DocumentoSolicitud[]
+  decisiones      DecisionSolicitud[]
+  matricula       Matricula?
+  trazas          Trazabilidad[]
+}
+
+model DocumentoSolicitud {
+  id              String    @id @default(uuid())
+  solicitudId     String
+  tipoDocumento   TipoDocumento
+  archivoUrl      String
+  validado        Boolean   @default(false)
+  fechaValidacion DateTime?
+  validadorId     String?
+
+  solicitud       Solicitud @relation(fields: [solicitudId], references: [id])
+  validador       Tutor?    @relation("Validador", fields: [validadorId], references: [id])
+}
+
+model Comision {
+  id        String          @id @default(uuid())
+  municipio String
+  activo    Boolean         @default(true)
+
+  sesiones  SesionComision[]
+}
+
+model SesionComision {
+  id        String          @id @default(uuid())
+  comisionId String
+  periodoId  String
+  fecha     DateTime
+  actaUrl   String?
+
+  comision  Comision        @relation(fields: [comisionId], references: [id])
+  periodo   PeriodoOtorgamiento @relation(fields: [periodoId], references: [id])
+  decisiones DecisionSolicitud[]
+}
+
+model DecisionSolicitud {
+  id          String          @id @default(uuid())
+  solicitudId String
+  sesionId    String
+  resultado   ResultadoDecision
+  puntuacion  Int
+  observaciones String?
+
+  solicitud   Solicitud       @relation(fields: [solicitudId], references: [id])
+  sesion      SesionComision  @relation(fields: [sesionId], references: [id])
+}
+
+model Matricula {
+  id              String          @id @default(uuid())
+  solicitudId     String          @unique
+  circuloId       String
+  fechaOtorgamiento DateTime
+  fechaLimite     DateTime
+  estado          EstadoMatricula
+  boletaUrl       String?
+
+  solicitud       Solicitud       @relation(fields: [solicitudId], references: [id])
+  circulo         CirculoInfantil @relation(fields: [circuloId], references: [id])
+  controles       ControlTrimestral[]
+}
+
+model ControlTrimestral {
+  id          String      @id @default(uuid())
+  matriculaId String
+  fecha       DateTime
+  vinculo     VinculoLaboral
+  observaciones String?
+  funcionarioId String
+
+  matricula   Matricula   @relation(fields: [matriculaId], references: [id])
+  funcionario Tutor       @relation(fields: [funcionarioId], references: [id])
+}
+
+model Trazabilidad {
+  id            String    @id @default(uuid())
+  solicitudId   String
+  estadoAnterior String
+  estadoNuevo   String
+  fecha         DateTime  @default(now())
+  usuarioId     String
+  comentario    String?
+
+  solicitud     Solicitud @relation(fields: [solicitudId], references: [id])
+  usuario       Tutor     @relation(fields: [usuarioId], references: [id])
 }
