@@ -74,10 +74,10 @@ enum EstadoMatricula {
 }
 
 // ---------------------------------------------------------
-// MODELOS (con tipos PostgreSQL nativos y mapeos)
+// MODELOS CON RELACIONES COMPLETAS
 // ---------------------------------------------------------
 
-// Tabla: tutor (todo en minúsculas para evitar problemas)
+// Tabla: tutor
 model Tutor {
   id              String              @id @default(uuid()) @db.Uuid
   nombre          String
@@ -94,8 +94,8 @@ model Tutor {
   hijos           Nino[]              @relation("Padres")
   solicitudes     Solicitud[]         @relation("TutorSolicitudes")
   documentosVal   DocumentoSolicitud[] @relation("Validador")
-  trazas          Trazabilidad[]
-  controles       ControlTrimestral[]
+  trazas          Trazabilidad[]      @relation("UsuarioTrazas")
+  controles       ControlTrimestral[] @relation("FuncionarioControles")
 
   @@map("tutor")
 }
@@ -111,7 +111,7 @@ model Nino {
   tutorId         String   @db.Uuid
 
   // Relaciones
-  tutor           Tutor?   @relation("Padres", fields: [tutorId], references: [id])
+  tutor           Tutor?   @relation("Padres", fields: [tutorId], references: [id], onDelete: Cascade)
   casoEspecial    Boolean  @default(false)
   tipoNecesidad   String?
   solicitud       Solicitud?
@@ -161,8 +161,8 @@ model CapacidadCirculo {
   cuposOcupados   Int
 
   // Relaciones
-  circulo         CirculoInfantil  @relation(fields: [idCirculo], references: [id])
-  periodo         PeriodoOtorgamiento @relation(fields: [idPeriodo], references: [id])
+  circulo         CirculoInfantil  @relation(fields: [idCirculo], references: [id], onDelete: Cascade)
+  periodo         PeriodoOtorgamiento @relation(fields: [idPeriodo], references: [id], onDelete: Cascade)
 
   @@unique([idCirculo, idPeriodo])
   @@map("capacidad_circulo")
@@ -181,14 +181,16 @@ model Solicitud {
   numeroRegistro  String
   observaciones   String?
 
-  // Relaciones
-  nino            Nino               @relation(fields: [ninoId], references: [id])
-  tutor           Tutor              @relation("TutorSolicitudes", fields: [tutorId], references: [id])
-  periodo         PeriodoOtorgamiento @relation(fields: [periodoId], references: [id])
+  // Relaciones CON onDelete: Cascade
+  nino            Nino               @relation(fields: [ninoId], references: [id], onDelete: Cascade)
+  tutor           Tutor              @relation("TutorSolicitudes", fields: [tutorId], references: [id], onDelete: Cascade)
+  periodo         PeriodoOtorgamiento @relation(fields: [periodoId], references: [id], onDelete: Cascade)
+  
+  // Relaciones (sin onDelete aquí - está en el otro lado)
   documentos      DocumentoSolicitud[]
   decisiones      DecisionSolicitud[]
   matricula       Matricula?
-  trazas          Trazabilidad[]
+  trazas          Trazabilidad[]     @relation("SolicitudTrazas")
 
   @@map("solicitud")
 }
@@ -204,8 +206,8 @@ model DocumentoSolicitud {
   validadorId     String?   @db.Uuid
 
   // Relaciones
-  solicitud       Solicitud @relation(fields: [solicitudId], references: [id])
-  validador       Tutor?    @relation("Validador", fields: [validadorId], references: [id])
+  solicitud       Solicitud @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
+  validador       Tutor?    @relation("Validador", fields: [validadorId], references: [id], onDelete: SetNull)
 
   @@map("documento_solicitud")
 }
@@ -231,8 +233,8 @@ model SesionComision {
   actaUrl   String?
 
   // Relaciones
-  comision  Comision        @relation(fields: [comisionId], references: [id])
-  periodo   PeriodoOtorgamiento @relation(fields: [periodoId], references: [id])
+  comision  Comision        @relation(fields: [comisionId], references: [id], onDelete: Cascade)
+  periodo   PeriodoOtorgamiento @relation(fields: [periodoId], references: [id], onDelete: Cascade)
   decisiones DecisionSolicitud[]
 
   @@map("sesion_comision")
@@ -248,8 +250,8 @@ model DecisionSolicitud {
   observaciones String?
 
   // Relaciones
-  solicitud   Solicitud       @relation(fields: [solicitudId], references: [id])
-  sesion      SesionComision  @relation(fields: [sesionId], references: [id])
+  solicitud   Solicitud       @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
+  sesion      SesionComision  @relation(fields: [sesionId], references: [id], onDelete: Cascade)
 
   @@map("decision_solicitud")
 }
@@ -265,8 +267,8 @@ model Matricula {
   boletaUrl       String?
 
   // Relaciones
-  solicitud       Solicitud       @relation(fields: [solicitudId], references: [id])
-  circulo         CirculoInfantil @relation(fields: [circuloId], references: [id])
+  solicitud       Solicitud       @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
+  circulo         CirculoInfantil @relation(fields: [circuloId], references: [id], onDelete: Cascade)
   controles       ControlTrimestral[]
 
   @@map("matricula")
@@ -282,8 +284,8 @@ model ControlTrimestral {
   funcionarioId String    @db.Uuid
 
   // Relaciones
-  matricula   Matricula   @relation(fields: [matriculaId], references: [id])
-  funcionario Tutor       @relation(fields: [funcionarioId], references: [id])
+  matricula   Matricula   @relation(fields: [matriculaId], references: [id], onDelete: Cascade)
+  funcionario Tutor       @relation("FuncionarioControles", fields: [funcionarioId], references: [id], onDelete: Cascade)
 
   @@map("control_trimestral")
 }
@@ -299,8 +301,8 @@ model Trazabilidad {
   comentario    String?
 
   // Relaciones
-  solicitud     Solicitud @relation(fields: [solicitudId], references: [id])
-  usuario       Tutor     @relation(fields: [usuarioId], references: [id])
+  solicitud     Solicitud @relation("SolicitudTrazas", fields: [solicitudId], references: [id], onDelete: Cascade)
+  usuario       Tutor     @relation("UsuarioTrazas", fields: [usuarioId], references: [id], onDelete: Cascade)
 
   @@map("trazabilidad")
 }
