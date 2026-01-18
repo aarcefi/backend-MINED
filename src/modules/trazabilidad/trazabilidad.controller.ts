@@ -1,34 +1,43 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+} from '@nestjs/common';
 import { TrazabilidadService } from './trazabilidad.service';
-import { CreateTrazabilidadDto } from './dto/create-trazabilidad.dto';
-import { UpdateTrazabilidadDto } from './dto/update-trazabilidad.dto';
+import { CreateTrazabilidadDto, UpdateTrazabilidadDto } from './dto';
+import { ApiTags } from '@nestjs/swagger';
 
+@ApiTags('trazabilidad')
 @Controller('trazabilidad')
 export class TrazabilidadController {
-  constructor(private readonly trazabilidadService: TrazabilidadService) {}
+  constructor(private readonly service: TrazabilidadService) {}
 
   @Post()
-  create(@Body() createTrazabilidadDto: CreateTrazabilidadDto) {
-    return this.trazabilidadService.create(createTrazabilidadDto);
+  create(@Body() dto: CreateTrazabilidadDto) {
+    return this.service.create(dto);
   }
 
   @Get()
   findAll() {
-    return this.trazabilidadService.findAll();
+    return this.service.findAll();
   }
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.trazabilidadService.findOne(+id);
+    return this.service.findOne(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateTrazabilidadDto: UpdateTrazabilidadDto) {
-    return this.trazabilidadService.update(+id, updateTrazabilidadDto);
+  update(@Param('id') id: string, @Body() dto: UpdateTrazabilidadDto) {
+    return this.service.update(id, dto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.trazabilidadService.remove(+id);
+    return this.service.remove(id);
   }
 }

@@ -1,26 +1,28 @@
 import { Injectable } from '@nestjs/common';
-import { CreateDecisionDto } from './dto/create-decision.dto';
-import { UpdateDecisionDto } from './dto/update-decision.dto';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { CreateDecisionDto, UpdateDecisionDto } from './dto';
 
 @Injectable()
-export class DecisionService {
-  create(createDecisionDto: CreateDecisionDto) {
-    return 'This action adds a new decision';
+export class DecisionSolicitudService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  create(data: CreateDecisionDto) {
+    return this.prisma.decisionSolicitud.create({ data });
   }
 
   findAll() {
-    return `This action returns all decision`;
+    return this.prisma.decisionSolicitud.findMany();
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} decision`;
+  findOne(id: string) {
+    return this.prisma.decisionSolicitud.findUnique({ where: { id } });
   }
 
-  update(id: number, updateDecisionDto: UpdateDecisionDto) {
-    return `This action updates a #${id} decision`;
+  update(id: string, data: UpdateDecisionDto) {
+    return this.prisma.decisionSolicitud.update({ where: { id }, data });
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} decision`;
+  remove(id: string) {
+    return this.prisma.decisionSolicitud.delete({ where: { id } });
   }
 }

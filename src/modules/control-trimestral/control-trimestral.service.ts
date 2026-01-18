@@ -1,26 +1,28 @@
 import { Injectable } from '@nestjs/common';
-import { CreateControlTrimestralDto } from './dto/create-control-trimestral.dto';
-import { UpdateControlTrimestralDto } from './dto/update-control-trimestral.dto';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { CreateControlTrimestralDto, UpdateControlTrimestralDto } from './dto';
 
 @Injectable()
 export class ControlTrimestralService {
-  create(createControlTrimestralDto: CreateControlTrimestralDto) {
-    return 'This action adds a new controlTrimestral';
+  constructor(private readonly prisma: PrismaService) {}
+
+  create(data: CreateControlTrimestralDto) {
+    return this.prisma.controlTrimestral.create({ data });
   }
 
   findAll() {
-    return `This action returns all controlTrimestral`;
+    return this.prisma.controlTrimestral.findMany();
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} controlTrimestral`;
+  findOne(id: string) {
+    return this.prisma.controlTrimestral.findUnique({ where: { id } });
   }
 
-  update(id: number, updateControlTrimestralDto: UpdateControlTrimestralDto) {
-    return `This action updates a #${id} controlTrimestral`;
+  update(id: string, data: UpdateControlTrimestralDto) {
+    return this.prisma.controlTrimestral.update({ where: { id }, data });
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} controlTrimestral`;
+  remove(id: string) {
+    return this.prisma.controlTrimestral.delete({ where: { id } });
   }
 }

@@ -1,15 +1,24 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+} from '@nestjs/common';
 import { SolicitudService } from './solicitud.service';
-import { CreateSolicitudDto } from './dto/create-solicitud.dto';
-import { UpdateSolicitudDto } from './dto/update-solicitud.dto';
+import { CreateSolicitudDto, UpdateSolicitudDto } from './dto';
+import { ApiTags } from '@nestjs/swagger';
 
+@ApiTags('solicitud')
 @Controller('solicitud')
 export class SolicitudController {
   constructor(private readonly solicitudService: SolicitudService) {}
 
   @Post()
-  create(@Body() createSolicitudDto: CreateSolicitudDto) {
-    return this.solicitudService.create(createSolicitudDto);
+  create(@Body() dto: CreateSolicitudDto) {
+    return this.solicitudService.create(dto);
   }
 
   @Get()
@@ -19,16 +28,16 @@ export class SolicitudController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.solicitudService.findOne(+id);
+    return this.solicitudService.findOne(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateSolicitudDto: UpdateSolicitudDto) {
-    return this.solicitudService.update(+id, updateSolicitudDto);
+  update(@Param('id') id: string, @Body() dto: UpdateSolicitudDto) {
+    return this.solicitudService.update(id, dto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.solicitudService.remove(+id);
+    return this.solicitudService.remove(id);
   }
 }

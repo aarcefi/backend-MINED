@@ -1,34 +1,43 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+} from '@nestjs/common';
 import { ControlTrimestralService } from './control-trimestral.service';
-import { CreateControlTrimestralDto } from './dto/create-control-trimestral.dto';
-import { UpdateControlTrimestralDto } from './dto/update-control-trimestral.dto';
+import { CreateControlTrimestralDto, UpdateControlTrimestralDto } from './dto';
+import { ApiTags } from '@nestjs/swagger';
 
+@ApiTags('control-trimestral')
 @Controller('control-trimestral')
 export class ControlTrimestralController {
-  constructor(private readonly controlTrimestralService: ControlTrimestralService) {}
+  constructor(private readonly service: ControlTrimestralService) {}
 
   @Post()
-  create(@Body() createControlTrimestralDto: CreateControlTrimestralDto) {
-    return this.controlTrimestralService.create(createControlTrimestralDto);
+  create(@Body() dto: CreateControlTrimestralDto) {
+    return this.service.create(dto);
   }
 
   @Get()
   findAll() {
-    return this.controlTrimestralService.findAll();
+    return this.service.findAll();
   }
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.controlTrimestralService.findOne(+id);
+    return this.service.findOne(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateControlTrimestralDto: UpdateControlTrimestralDto) {
-    return this.controlTrimestralService.update(+id, updateControlTrimestralDto);
+  update(@Param('id') id: string, @Body() dto: UpdateControlTrimestralDto) {
+    return this.service.update(id, dto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.controlTrimestralService.remove(+id);
+    return this.service.remove(id);
   }
 }

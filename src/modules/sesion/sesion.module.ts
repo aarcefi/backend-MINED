@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
-import { SesionService } from './sesion.service';
-import { SesionController } from './sesion.controller';
+import { SesionComisionService } from './sesion.service';
+import { SesionComisionController } from './sesion.controller';
 
 @Module({
-  controllers: [SesionController],
-  providers: [SesionService],
+  controllers: [SesionComisionController],
+  providers: [SesionComisionService],
 })
-export class SesionModule {}
+export class SesionComisionModule {}

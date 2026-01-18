@@ -1,34 +1,43 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
-import { CapacidadService } from './capacidad.service';
-import { CreateCapacidadDto } from './dto/create-capacidad.dto';
-import { UpdateCapacidadDto } from './dto/update-capacidad.dto';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+} from '@nestjs/common';
+import { CapacidadCirculoService } from './capacidad.service';
+import { CreateCapacidadDto, UpdateCapacidadDto } from './dto';
+import { ApiTags } from '@nestjs/swagger';
 
-@Controller('capacidad')
-export class CapacidadController {
-  constructor(private readonly capacidadService: CapacidadService) {}
+@ApiTags('capacidad-circulo')
+@Controller('capacidad-circulo')
+export class CapacidadCirculoController {
+  constructor(private readonly service: CapacidadCirculoService) {}
 
   @Post()
-  create(@Body() createCapacidadDto: CreateCapacidadDto) {
-    return this.capacidadService.create(createCapacidadDto);
+  create(@Body() dto: CreateCapacidadDto) {
+    return this.service.create(dto);
   }
 
   @Get()
   findAll() {
-    return this.capacidadService.findAll();
+    return this.service.findAll();
   }
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.capacidadService.findOne(+id);
+    return this.service.findOne(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateCapacidadDto: UpdateCapacidadDto) {
-    return this.capacidadService.update(+id, updateCapacidadDto);
+  update(@Param('id') id: string, @Body() dto: UpdateCapacidadDto) {
+    return this.service.update(id, dto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.capacidadService.remove(+id);
+    return this.service.remove(id);
   }
 }

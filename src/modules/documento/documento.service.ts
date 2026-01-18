@@ -1,26 +1,28 @@
 import { Injectable } from '@nestjs/common';
-import { CreateDocumentoDto } from './dto/create-documento.dto';
-import { UpdateDocumentoDto } from './dto/update-documento.dto';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { CreateDocumentoDto, UpdateDocumentoDto } from './dto';
 
 @Injectable()
 export class DocumentoService {
-  create(createDocumentoDto: CreateDocumentoDto) {
-    return 'This action adds a new documento';
+  constructor(private readonly prisma: PrismaService) {}
+
+  create(data: CreateDocumentoDto) {
+    return this.prisma.documentoSolicitud.create({ data });
   }
 
   findAll() {
-    return `This action returns all documento`;
+    return this.prisma.documentoSolicitud.findMany();
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} documento`;
+  findOne(id: string) {
+    return this.prisma.documentoSolicitud.findUnique({ where: { id } });
   }
 
-  update(id: number, updateDocumentoDto: UpdateDocumentoDto) {
-    return `This action updates a #${id} documento`;
+  update(id: string, data: UpdateDocumentoDto) {
+    return this.prisma.documentoSolicitud.update({ where: { id }, data });
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} documento`;
+  remove(id: string) {
+    return this.prisma.documentoSolicitud.delete({ where: { id } });
   }
 }

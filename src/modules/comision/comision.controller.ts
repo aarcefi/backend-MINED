@@ -1,34 +1,43 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+} from '@nestjs/common';
 import { ComisionService } from './comision.service';
-import { CreateComisionDto } from './dto/create-comision.dto';
-import { UpdateComisionDto } from './dto/update-comision.dto';
+import { CreateComisionDto, UpdateComisionDto } from './dto';
+import { ApiTags } from '@nestjs/swagger';
 
+@ApiTags('comision')
 @Controller('comision')
 export class ComisionController {
-  constructor(private readonly comisionService: ComisionService) {}
+  constructor(private readonly service: ComisionService) {}
 
   @Post()
-  create(@Body() createComisionDto: CreateComisionDto) {
-    return this.comisionService.create(createComisionDto);
+  create(@Body() dto: CreateComisionDto) {
+    return this.service.create(dto);
   }
 
   @Get()
   findAll() {
-    return this.comisionService.findAll();
+    return this.service.findAll();
   }
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.comisionService.findOne(+id);
+    return this.service.findOne(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateComisionDto: UpdateComisionDto) {
-    return this.comisionService.update(+id, updateComisionDto);
+  update(@Param('id') id: string, @Body() dto: UpdateComisionDto) {
+    return this.service.update(id, dto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.comisionService.remove(+id);
+    return this.service.remove(id);
   }
 }

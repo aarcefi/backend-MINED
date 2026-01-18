@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
-import { DecisionService } from './decision.service';
-import { DecisionController } from './decision.controller';
+import { DecisionSolicitudService } from './decision.service';
+import { DecisionSolicitudController } from './decision.controller';
 
 @Module({
-  controllers: [DecisionController],
-  providers: [DecisionService],
+  controllers: [DecisionSolicitudController],
+  providers: [DecisionSolicitudService],
 })
-export class DecisionModule {}
+export class DecisionSolicitudModule {}

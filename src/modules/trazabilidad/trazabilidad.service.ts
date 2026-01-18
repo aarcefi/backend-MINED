@@ -1,26 +1,28 @@
 import { Injectable } from '@nestjs/common';
-import { CreateTrazabilidadDto } from './dto/create-trazabilidad.dto';
-import { UpdateTrazabilidadDto } from './dto/update-trazabilidad.dto';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { CreateTrazabilidadDto, UpdateTrazabilidadDto } from './dto';
 
 @Injectable()
 export class TrazabilidadService {
-  create(createTrazabilidadDto: CreateTrazabilidadDto) {
-    return 'This action adds a new trazabilidad';
+  constructor(private readonly prisma: PrismaService) {}
+
+  create(data: CreateTrazabilidadDto) {
+    return this.prisma.trazabilidad.create({ data });
   }
 
   findAll() {
-    return `This action returns all trazabilidad`;
+    return this.prisma.trazabilidad.findMany();
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} trazabilidad`;
+  findOne(id: string) {
+    return this.prisma.trazabilidad.findUnique({ where: { id } });
   }
 
-  update(id: number, updateTrazabilidadDto: UpdateTrazabilidadDto) {
-    return `This action updates a #${id} trazabilidad`;
+  update(id: string, data: UpdateTrazabilidadDto) {
+    return this.prisma.trazabilidad.update({ where: { id }, data });
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} trazabilidad`;
+  remove(id: string) {
+    return this.prisma.trazabilidad.delete({ where: { id } });
   }
 }

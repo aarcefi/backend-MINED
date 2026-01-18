@@ -1,34 +1,43 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+} from '@nestjs/common';
 import { MatriculaService } from './matricula.service';
-import { CreateMatriculaDto } from './dto/create-matricula.dto';
-import { UpdateMatriculaDto } from './dto/update-matricula.dto';
+import { CreateMatriculaDto, UpdateMatriculaDto } from './dto';
+import { ApiTags } from '@nestjs/swagger';
 
+@ApiTags('matricula')
 @Controller('matricula')
 export class MatriculaController {
-  constructor(private readonly matriculaService: MatriculaService) {}
+  constructor(private readonly service: MatriculaService) {}
 
   @Post()
-  create(@Body() createMatriculaDto: CreateMatriculaDto) {
-    return this.matriculaService.create(createMatriculaDto);
+  create(@Body() dto: CreateMatriculaDto) {
+    return this.service.create(dto);
   }
 
   @Get()
   findAll() {
-    return this.matriculaService.findAll();
+    return this.service.findAll();
   }
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.matriculaService.findOne(+id);
+    return this.service.findOne(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateMatriculaDto: UpdateMatriculaDto) {
-    return this.matriculaService.update(+id, updateMatriculaDto);
+  update(@Param('id') id: string, @Body() dto: UpdateMatriculaDto) {
+    return this.service.update(id, dto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.matriculaService.remove(+id);
+    return this.service.remove(id);
   }
 }

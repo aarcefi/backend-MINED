@@ -1,26 +1,28 @@
 import { Injectable } from '@nestjs/common';
-import { CreateNinoDto } from './dto/create-nino.dto';
-import { UpdateNinoDto } from './dto/update-nino.dto';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { CreateNinoDto, UpdateNinoDto } from './dto';
 
 @Injectable()
 export class NinoService {
-  create(createNinoDto: CreateNinoDto) {
-    return 'This action adds a new nino';
+  constructor(private readonly prisma: PrismaService) {}
+
+  create(data: CreateNinoDto) {
+    return this.prisma.nino.create({ data });
   }
 
   findAll() {
-    return `This action returns all nino`;
+    return this.prisma.nino.findMany();
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} nino`;
+  findOne(id: string) {
+    return this.prisma.nino.findUnique({ where: { id } });
   }
 
-  update(id: number, updateNinoDto: UpdateNinoDto) {
-    return `This action updates a #${id} nino`;
+  update(id: string, data: UpdateNinoDto) {
+    return this.prisma.nino.update({ where: { id }, data });
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} nino`;
+  remove(id: string) {
+    return this.prisma.nino.delete({ where: { id } });
   }
 }

@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
 import { PeriodoService } from './periodo.service';
-import { PeriodoController } from './periodo.controller';
+import { PeriodoOtorgamientoController } from './periodo.controller';
 
 @Module({
-  controllers: [PeriodoController],
+  controllers: [PeriodoOtorgamientoController],
   providers: [PeriodoService],
 })
-export class PeriodoModule {}
+export class PeriodoOtorgamientoModule {}

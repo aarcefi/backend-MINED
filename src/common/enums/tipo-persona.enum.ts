@@ -1,0 +1,7 @@
+export enum TipoPersona {
+  MADRE = 'MADRE',
+  PADRE = 'PADRE',
+  TUTOR = 'TUTOR',
+  FUNCIONARIO = 'FUNCIONARIO',
+  TRABAJADOR_SOCIAL = 'TRABAJADOR_SOCIAL',
+}

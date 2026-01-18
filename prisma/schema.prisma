@@ -74,10 +74,12 @@ enum EstadoMatricula {
 }
 
 // ---------------------------------------------------------
-// MODELOS
+// MODELOS (con tipos PostgreSQL nativos y mapeos)
 // ---------------------------------------------------------
+
+// Tabla: tutor (todo en minúsculas para evitar problemas)
 model Tutor {
-  id              String              @id @default(uuid())
+  id              String              @id @default(uuid()) @db.Uuid
   nombre          String
   apellidos       String
   carnetIdentidad String              @unique
@@ -88,32 +90,38 @@ model Tutor {
   activo          Boolean             @default(true)
   cantHijo        Int                 @default(1)
 
+  // Relaciones
   hijos           Nino[]              @relation("Padres")
   solicitudes     Solicitud[]         @relation("TutorSolicitudes")
   documentosVal   DocumentoSolicitud[] @relation("Validador")
   trazas          Trazabilidad[]
-
   controles       ControlTrimestral[]
+
+  @@map("tutor")
 }
 
-
+// Tabla: nino
 model Nino {
-  id              String   @id @default(uuid())
+  id              String   @id @default(uuid()) @db.Uuid
   nombre          String
   apellidos       String
-  fechaNacimiento DateTime
+  fechaNacimiento DateTime @db.Timestamp
   sexo            String
   tarjetaMenor    String   @unique
-  tutorId         String
+  tutorId         String   @db.Uuid
 
+  // Relaciones
   tutor           Tutor?   @relation("Padres", fields: [tutorId], references: [id])
   casoEspecial    Boolean  @default(false)
   tipoNecesidad   String?
   solicitud       Solicitud?
+
+  @@map("nino")
 }
 
+// Tabla: circulo_infantil
 model CirculoInfantil {
-  id              String             @id @default(uuid())
+  id              String             @id @default(uuid()) @db.Uuid
   nombre          String
   direccion       String
   municipio       String
@@ -121,47 +129,59 @@ model CirculoInfantil {
   tipo            TipoCirculo
   activo          Boolean            @default(true)
 
+  // Relaciones
   capacidades     CapacidadCirculo[]
   matriculas      Matricula[]
+
+  @@map("circulo_infantil")
 }
 
+// Tabla: periodo_otorgamiento
 model PeriodoOtorgamiento {
-  id              String             @id @default(uuid())
+  id              String             @id @default(uuid()) @db.Uuid
   nombre          String
-  fechaInicio     DateTime
-  fechaCierre     DateTime
-  fechaAsignacion DateTime
+  fechaInicio     DateTime           @db.Timestamp
+  fechaCierre     DateTime           @db.Timestamp
+  fechaAsignacion DateTime           @db.Timestamp
 
+  // Relaciones
   solicitudes     Solicitud[]
   capacidades     CapacidadCirculo[]
   sesiones        SesionComision[]
+
+  @@map("periodo_otorgamiento")
 }
 
+// Tabla: capacidad_circulo
 model CapacidadCirculo {
-  id          String           @id @default(uuid())
-  idCirculo   String
-  idPeriodo   String
+  id              String           @id @default(uuid()) @db.Uuid
+  idCirculo       String           @db.Uuid
+  idPeriodo       String           @db.Uuid
   cuposDisponibles Int
   cuposOcupados   Int
 
-  circulo     CirculoInfantil  @relation(fields: [idCirculo], references: [id])
-  periodo     PeriodoOtorgamiento @relation(fields: [idPeriodo], references: [id])
+  // Relaciones
+  circulo         CirculoInfantil  @relation(fields: [idCirculo], references: [id])
+  periodo         PeriodoOtorgamiento @relation(fields: [idPeriodo], references: [id])
 
   @@unique([idCirculo, idPeriodo])
+  @@map("capacidad_circulo")
 }
 
+// Tabla: solicitud
 model Solicitud {
-  id              String             @id @default(uuid())
-  ninoId          String             @unique
-  tutorId         String
-  fechaSolicitud  DateTime           @default(now())
+  id              String             @id @default(uuid()) @db.Uuid
+  ninoId          String             @unique @db.Uuid
+  tutorId         String             @db.Uuid
+  fechaSolicitud  DateTime           @default(now()) @db.Timestamp
   sector          SectorPrioridad
   tipoSolicitud   TipoSolicitud
   estado          EstadoSolicitud
-  periodoId       String
+  periodoId       String             @db.Uuid
   numeroRegistro  String
   observaciones   String?
 
+  // Relaciones
   nino            Nino               @relation(fields: [ninoId], references: [id])
   tutor           Tutor              @relation("TutorSolicitudes", fields: [tutorId], references: [id])
   periodo         PeriodoOtorgamiento @relation(fields: [periodoId], references: [id])
@@ -169,88 +189,118 @@ model Solicitud {
   decisiones      DecisionSolicitud[]
   matricula       Matricula?
   trazas          Trazabilidad[]
+
+  @@map("solicitud")
 }
 
+// Tabla: documento_solicitud
 model DocumentoSolicitud {
-  id              String    @id @default(uuid())
-  solicitudId     String
+  id              String    @id @default(uuid()) @db.Uuid
+  solicitudId     String    @db.Uuid
   tipoDocumento   TipoDocumento
   archivoUrl      String
   validado        Boolean   @default(false)
-  fechaValidacion DateTime?
-  validadorId     String?
+  fechaValidacion DateTime? @db.Timestamp
+  validadorId     String?   @db.Uuid
 
+  // Relaciones
   solicitud       Solicitud @relation(fields: [solicitudId], references: [id])
   validador       Tutor?    @relation("Validador", fields: [validadorId], references: [id])
+
+  @@map("documento_solicitud")
 }
 
+// Tabla: comision
 model Comision {
-  id        String          @id @default(uuid())
+  id        String          @id @default(uuid()) @db.Uuid
   municipio String
   activo    Boolean         @default(true)
 
+  // Relaciones
   sesiones  SesionComision[]
+
+  @@map("comision")
 }
 
+// Tabla: sesion_comision
 model SesionComision {
-  id        String          @id @default(uuid())
-  comisionId String
-  periodoId  String
-  fecha     DateTime
+  id        String          @id @default(uuid()) @db.Uuid
+  comisionId String         @db.Uuid
+  periodoId  String         @db.Uuid
+  fecha     DateTime        @db.Timestamp
   actaUrl   String?
 
+  // Relaciones
   comision  Comision        @relation(fields: [comisionId], references: [id])
   periodo   PeriodoOtorgamiento @relation(fields: [periodoId], references: [id])
   decisiones DecisionSolicitud[]
+
+  @@map("sesion_comision")
 }
 
+// Tabla: decision_solicitud
 model DecisionSolicitud {
-  id          String          @id @default(uuid())
-  solicitudId String
-  sesionId    String
+  id          String          @id @default(uuid()) @db.Uuid
+  solicitudId String          @db.Uuid
+  sesionId    String          @db.Uuid
   resultado   ResultadoDecision
   puntuacion  Int
   observaciones String?
 
+  // Relaciones
   solicitud   Solicitud       @relation(fields: [solicitudId], references: [id])
   sesion      SesionComision  @relation(fields: [sesionId], references: [id])
+
+  @@map("decision_solicitud")
 }
 
+// Tabla: matricula
 model Matricula {
-  id              String          @id @default(uuid())
-  solicitudId     String          @unique
-  circuloId       String
-  fechaOtorgamiento DateTime
-  fechaLimite     DateTime
+  id              String          @id @default(uuid()) @db.Uuid
+  solicitudId     String          @unique @db.Uuid
+  circuloId       String          @db.Uuid
+  fechaOtorgamiento DateTime      @db.Timestamp
+  fechaLimite     DateTime        @db.Timestamp
   estado          EstadoMatricula
   boletaUrl       String?
 
+  // Relaciones
   solicitud       Solicitud       @relation(fields: [solicitudId], references: [id])
   circulo         CirculoInfantil @relation(fields: [circuloId], references: [id])
   controles       ControlTrimestral[]
+
+  @@map("matricula")
 }
 
+// Tabla: control_trimestral
 model ControlTrimestral {
-  id          String      @id @default(uuid())
-  matriculaId String
-  fecha       DateTime
+  id          String      @id @default(uuid()) @db.Uuid
+  matriculaId String      @db.Uuid
+  fecha       DateTime    @db.Timestamp
   vinculo     VinculoLaboral
   observaciones String?
-  funcionarioId String
+  funcionarioId String    @db.Uuid
 
+  // Relaciones
   matricula   Matricula   @relation(fields: [matriculaId], references: [id])
   funcionario Tutor       @relation(fields: [funcionarioId], references: [id])
+
+  @@map("control_trimestral")
 }
 
+// Tabla: trazabilidad
 model Trazabilidad {
-  id            String    @id @default(uuid())
-  solicitudId   String
+  id            String    @id @default(uuid()) @db.Uuid
+  solicitudId   String    @db.Uuid
   estadoAnterior String
   estadoNuevo   String
-  fecha         DateTime  @default(now())
-  usuarioId     String
+  fecha         DateTime  @default(now()) @db.Timestamp
+  usuarioId     String    @db.Uuid
   comentario    String?
 
+  // Relaciones
   solicitud     Solicitud @relation(fields: [solicitudId], references: [id])
   usuario       Tutor     @relation(fields: [usuarioId], references: [id])
+
+  @@map("trazabilidad")
 }

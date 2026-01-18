@@ -1,26 +1,28 @@
 import { Injectable } from '@nestjs/common';
-import { CreateCirculoInfantilDto } from './dto/create-circulo-infantil.dto';
-import { UpdateCirculoInfantilDto } from './dto/update-circulo-infantil.dto';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { CreateCirculoInfantilDto, UpdateCirculoInfantilDto } from './dto';
 
 @Injectable()
 export class CirculoInfantilService {
-  create(createCirculoInfantilDto: CreateCirculoInfantilDto) {
-    return 'This action adds a new circuloInfantil';
+  constructor(private readonly prisma: PrismaService) {}
+
+  create(data: CreateCirculoInfantilDto) {
+    return this.prisma.circuloInfantil.create({ data });
   }
 
   findAll() {
-    return `This action returns all circuloInfantil`;
+    return this.prisma.circuloInfantil.findMany();
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} circuloInfantil`;
+  findOne(id: string) {
+    return this.prisma.circuloInfantil.findUnique({ where: { id } });
   }
 
-  update(id: number, updateCirculoInfantilDto: UpdateCirculoInfantilDto) {
-    return `This action updates a #${id} circuloInfantil`;
+  update(id: string, data: UpdateCirculoInfantilDto) {
+    return this.prisma.circuloInfantil.update({ where: { id }, data });
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} circuloInfantil`;
+  remove(id: string) {
+    return this.prisma.circuloInfantil.delete({ where: { id } });
   }
 }

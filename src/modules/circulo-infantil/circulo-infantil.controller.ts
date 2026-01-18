@@ -1,34 +1,43 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+} from '@nestjs/common';
 import { CirculoInfantilService } from './circulo-infantil.service';
-import { CreateCirculoInfantilDto } from './dto/create-circulo-infantil.dto';
-import { UpdateCirculoInfantilDto } from './dto/update-circulo-infantil.dto';
+import { CreateCirculoInfantilDto, UpdateCirculoInfantilDto } from './dto';
+import { ApiTags } from '@nestjs/swagger';
 
+@ApiTags('circulo-infantil')
 @Controller('circulo-infantil')
 export class CirculoInfantilController {
-  constructor(private readonly circuloInfantilService: CirculoInfantilService) {}
+  constructor(private readonly service: CirculoInfantilService) {}
 
   @Post()
-  create(@Body() createCirculoInfantilDto: CreateCirculoInfantilDto) {
-    return this.circuloInfantilService.create(createCirculoInfantilDto);
+  create(@Body() dto: CreateCirculoInfantilDto) {
+    return this.service.create(dto);
   }
 
   @Get()
   findAll() {
-    return this.circuloInfantilService.findAll();
+    return this.service.findAll();
   }
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.circuloInfantilService.findOne(+id);
+    return this.service.findOne(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateCirculoInfantilDto: UpdateCirculoInfantilDto) {
-    return this.circuloInfantilService.update(+id, updateCirculoInfantilDto);
+  update(@Param('id') id: string, @Body() dto: UpdateCirculoInfantilDto) {
+    return this.service.update(id, dto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.circuloInfantilService.remove(+id);
+    return this.service.remove(id);
   }
 }

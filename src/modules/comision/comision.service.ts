@@ -1,26 +1,28 @@
 import { Injectable } from '@nestjs/common';
-import { CreateComisionDto } from './dto/create-comision.dto';
-import { UpdateComisionDto } from './dto/update-comision.dto';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { CreateComisionDto, UpdateComisionDto } from './dto';
 
 @Injectable()
 export class ComisionService {
-  create(createComisionDto: CreateComisionDto) {
-    return 'This action adds a new comision';
+  constructor(private readonly prisma: PrismaService) {}
+
+  create(data: CreateComisionDto) {
+    return this.prisma.comision.create({ data });
   }
 
   findAll() {
-    return `This action returns all comision`;
+    return this.prisma.comision.findMany();
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} comision`;
+  findOne(id: string) {
+    return this.prisma.comision.findUnique({ where: { id } });
   }
 
-  update(id: number, updateComisionDto: UpdateComisionDto) {
-    return `This action updates a #${id} comision`;
+  update(id: string, data: UpdateComisionDto) {
+    return this.prisma.comision.update({ where: { id }, data });
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} comision`;
+  remove(id: string) {
+    return this.prisma.comision.delete({ where: { id } });
   }
 }

@@ -1,34 +1,43 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+} from '@nestjs/common';
 import { DocumentoService } from './documento.service';
-import { CreateDocumentoDto } from './dto/create-documento.dto';
-import { UpdateDocumentoDto } from './dto/update-documento.dto';
+import { CreateDocumentoDto, UpdateDocumentoDto } from './dto';
+import { ApiTags } from '@nestjs/swagger';
 
-@Controller('documento')
+@ApiTags('documento-solicitud')
+@Controller('documento-solicitud')
 export class DocumentoController {
-  constructor(private readonly documentoService: DocumentoService) {}
+  constructor(private readonly service: DocumentoService) {}
 
   @Post()
-  create(@Body() createDocumentoDto: CreateDocumentoDto) {
-    return this.documentoService.create(createDocumentoDto);
+  create(@Body() dto: CreateDocumentoDto) {
+    return this.service.create(dto);
   }
 
   @Get()
   findAll() {
-    return this.documentoService.findAll();
+    return this.service.findAll();
   }
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.documentoService.findOne(+id);
+    return this.service.findOne(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateDocumentoDto: UpdateDocumentoDto) {
-    return this.documentoService.update(+id, updateDocumentoDto);
+  update(@Param('id') id: string, @Body() dto: UpdateDocumentoDto) {
+    return this.service.update(id, dto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.documentoService.remove(+id);
+    return this.service.remove(id);
   }
 }

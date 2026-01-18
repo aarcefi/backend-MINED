@@ -1,15 +1,24 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+} from '@nestjs/common';
 import { TutorService } from './tutor.service';
-import { CreateTutorDto } from './dto/create-tutor.dto';
-import { UpdateTutorDto } from './dto/update-tutor.dto';
+import { CreateTutorDto, UpdateTutorDto } from './dto';
+import { ApiTags } from '@nestjs/swagger';
 
+@ApiTags('tutor')
 @Controller('tutor')
 export class TutorController {
   constructor(private readonly tutorService: TutorService) {}
 
   @Post()
-  create(@Body() createTutorDto: CreateTutorDto) {
-    return this.tutorService.create(createTutorDto);
+  create(@Body() dto: CreateTutorDto) {
+    return this.tutorService.create(dto);
   }
 
   @Get()
@@ -19,16 +28,16 @@ export class TutorController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.tutorService.findOne(+id);
+    return this.tutorService.findOne(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateTutorDto: UpdateTutorDto) {
-    return this.tutorService.update(+id, updateTutorDto);
+  update(@Param('id') id: string, @Body() dto: UpdateTutorDto) {
+    return this.tutorService.update(id, dto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.tutorService.remove(+id);
+    return this.tutorService.remove(id);
   }
 }

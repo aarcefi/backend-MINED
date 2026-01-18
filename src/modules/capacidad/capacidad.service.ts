@@ -1,26 +1,28 @@
 import { Injectable } from '@nestjs/common';
-import { CreateCapacidadDto } from './dto/create-capacidad.dto';
-import { UpdateCapacidadDto } from './dto/update-capacidad.dto';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { CreateCapacidadDto, UpdateCapacidadDto } from './dto';
 
 @Injectable()
-export class CapacidadService {
-  create(createCapacidadDto: CreateCapacidadDto) {
-    return 'This action adds a new capacidad';
+export class CapacidadCirculoService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  create(data: CreateCapacidadDto) {
+    return this.prisma.capacidadCirculo.create({ data });
   }
 
   findAll() {
-    return `This action returns all capacidad`;
+    return this.prisma.capacidadCirculo.findMany();
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} capacidad`;
+  findOne(id: string) {
+    return this.prisma.capacidadCirculo.findUnique({ where: { id } });
   }
 
-  update(id: number, updateCapacidadDto: UpdateCapacidadDto) {
-    return `This action updates a #${id} capacidad`;
+  update(id: string, data: UpdateCapacidadDto) {
+    return this.prisma.capacidadCirculo.update({ where: { id }, data });
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} capacidad`;
+  remove(id: string) {
+    return this.prisma.capacidadCirculo.delete({ where: { id } });
   }
 }
