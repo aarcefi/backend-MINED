@@ -1,0 +1,381 @@
+// ---------------------------------------------------------
+// Configuración de conexión a PostgreSQL
+// ---------------------------------------------------------
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ---------------------------------------------------------
+// ENUMS
+// ---------------------------------------------------------
+enum TipoPersona {
+  MADRE
+  PADRE
+  TUTOR
+}
+
+enum TipoSolicitud {
+  TRABAJADOR
+  ESTUDIANTE
+  CASO_SOCIAL
+}
+
+enum SectorPrioridad {
+  SALUD
+  EDUCACION
+  DEFENSA
+  CASO_SOCIAL
+  OTRO
+}
+
+enum EstadoSolicitud {
+  RECIBIDA
+  EN_REVISION
+  APROBADA
+  RECHAZADA
+  EN_ESPERA
+}
+
+enum TipoDocumento {
+  CARNET
+  TARJETA_MENOR
+  CARTA_LABORAL
+  CARTA_ESTUDIO
+  INFORME_SOCIAL
+}
+
+enum VinculoLaboral {
+  ACTIVO
+  ESTUDIANTE
+  PERDIDO
+}
+
+enum TipoCirculo {
+  NORMAL
+  ESPECIAL
+  MIXTO
+}
+
+enum ResultadoDecision {
+  ACEPTADA
+  DENEGADA
+}
+
+enum EstadoMatricula {
+  ACTIVA
+  VENCIDA
+  CANCELADA
+}
+
+enum RolUsuario {
+  SOLICITANTE
+  FUNCIONARIO_MUNICIPAL
+  COMISION_OTORGAMIENTO
+  DIRECTOR_CIRCULO
+  ADMINISTRADOR
+}
+
+// ---------------------------------------------------------
+// MODELOS CON TIPOS DE FECHA OPTIMIZADOS
+// ---------------------------------------------------------
+
+// Tabla: Usuario (para autenticación)
+model Usuario {
+  id              String    @id @default(uuid()) @db.Uuid
+  email           String    @unique
+  password        String
+  rol             RolUsuario
+  activo          Boolean   @default(true)
+  createdAt       DateTime  @default(now()) @db.Timestamp
+  updatedAt       DateTime  @updatedAt @db.Timestamp
+  refreshToken    String?
+  tokenExpiry     DateTime? @db.Timestamp
+
+  // Relaciones según el rol
+  perfilSolicitante   PerfilSolicitante?
+  perfilFuncionario   PerfilFuncionario?
+  perfilComision      PerfilComision?
+
+  // Relación con Notificaciones
+  notificaciones  Notificacion[]
+
+  @@map("usuarios")
+}
+
+// Tabla: Perfil del Solicitante (padre/madre/tutor)
+model PerfilSolicitante {
+  id              String              @id @default(uuid()) @db.Uuid
+  usuarioId       String              @unique @db.Uuid
+  nombre          String
+  apellidos       String
+  carnetIdentidad String              @unique
+  telefono        String?
+  direccion       String
+  municipio       String
+  tipoPersona     TipoPersona
+  cantHijos       Int                 @default(1)
+
+  // Relaciones
+  usuario         Usuario             @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  hijos           Nino[]
+  solicitudes     Solicitud[]
+
+  @@map("perfiles_solicitantes")
+}
+
+// Tabla: Perfil del Funcionario Municipal
+model PerfilFuncionario {
+  id              String              @id @default(uuid()) @db.Uuid
+  usuarioId       String              @unique @db.Uuid
+  nombre          String
+  apellidos       String
+  carnetIdentidad String              @unique
+  telefono        String?
+  cargo           String
+  municipio       String
+
+  // Relaciones
+  usuario         Usuario             @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  documentosVal   DocumentoSolicitud[]
+  controles       ControlTrimestral[]
+  trazas          Trazabilidad[]
+
+  @@map("perfiles_funcionarios")
+}
+
+// Tabla: Perfil de la Comisión de Otorgamiento
+model PerfilComision {
+  id              String          @id @default(uuid()) @db.Uuid
+  usuarioId       String          @unique @db.Uuid
+  nombre          String
+  apellidos       String
+  carnetIdentidad String          @unique
+  municipio       String
+  cargo           String
+
+  // Relaciones
+  usuario         Usuario         @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  decisiones      DecisionSolicitud[]
+
+  @@map("perfiles_comisiones")
+}
+
+// Tabla: nino
+model Nino {
+  id              String   @id @default(uuid()) @db.Uuid
+  nombre          String
+  apellidos       String
+  fechaNacimiento DateTime @db.Date 
+  sexo            String
+  tarjetaMenor    String   @unique
+  solicitanteId   String   @db.Uuid
+  casoEspecial    Boolean  @default(false)
+  tipoNecesidad   String?
+
+  // Relaciones
+  solicitante     PerfilSolicitante   @relation(fields: [solicitanteId], references: [id], onDelete: Cascade)
+  solicitud       Solicitud?
+
+  @@map("ninos")
+}
+
+// Tabla: circulo_infantil
+model CirculoInfantil {
+  id              String             @id @default(uuid()) @db.Uuid
+  nombre          String
+  direccion       String
+  municipio       String
+  provincia       String
+  capacidadTotal  Int
+  tipo            TipoCirculo
+  activo          Boolean            @default(true)
+  telefono        String?
+
+  // Relaciones
+  capacidades     CapacidadCirculo[]
+  matriculas      Matricula[]
+
+  @@map("circulos_infantiles")
+}
+
+// Tabla: periodo_otorgamiento
+model PeriodoOtorgamiento {
+  id              String             @id @default(uuid()) @db.Uuid
+  nombre          String
+  fechaInicio     DateTime           @db.Date 
+  fechaCierre     DateTime           @db.Date 
+  fechaAsignacion DateTime           @db.Date 
+  activo          Boolean            @default(true)
+
+  // Relaciones
+  solicitudes     Solicitud[]
+  capacidades     CapacidadCirculo[]
+  sesiones        SesionComision[]
+
+  @@map("periodos_otorgamiento")
+}
+
+// Tabla: capacidad_circulo
+model CapacidadCirculo {
+  id              String           @id @default(uuid()) @db.Uuid
+  circuloId       String           @db.Uuid
+  periodoId       String           @db.Uuid
+  cuposDisponibles Int
+  cuposOcupados   Int
+
+  // Relaciones
+  circulo         CirculoInfantil  @relation(fields: [circuloId], references: [id], onDelete: Cascade)
+  periodo         PeriodoOtorgamiento @relation(fields: [periodoId], references: [id], onDelete: Cascade)
+
+  @@unique([circuloId, periodoId])
+  @@map("capacidades_circulos")
+}
+
+// Tabla: solicitud
+model Solicitud {
+  id              String             @id @default(uuid()) @db.Uuid
+  ninoId          String             @unique @db.Uuid
+  solicitanteId   String             @db.Uuid
+  fechaSolicitud  DateTime           @default(now()) @db.Timestamp  
+  sector          SectorPrioridad
+  tipoSolicitud   TipoSolicitud
+  estado          EstadoSolicitud    @default(RECIBIDA)
+  periodoId       String             @db.Uuid
+  numeroRegistro  String             @unique
+  observaciones   String?
+  prioridad       Int               @default(0)
+
+  // Relaciones
+  nino            Nino               @relation(fields: [ninoId], references: [id], onDelete: Cascade)
+  solicitante     PerfilSolicitante  @relation(fields: [solicitanteId], references: [id], onDelete: Cascade)
+  periodo         PeriodoOtorgamiento @relation(fields: [periodoId], references: [id], onDelete: Cascade)
+  documentos      DocumentoSolicitud[]
+  decisiones      DecisionSolicitud[]
+  matricula       Matricula?
+  trazas          Trazabilidad[]
+
+  @@map("solicitudes")
+}
+
+// Tabla: documento_solicitud
+model DocumentoSolicitud {
+  id              String      @id @default(uuid()) @db.Uuid
+  solicitudId     String      @db.Uuid
+  tipoDocumento   TipoDocumento
+  archivoUrl      String
+  nombreArchivo   String
+  validado        Boolean     @default(false)
+  fechaValidacion DateTime?   @db.Timestamp  
+  validadorId     String?     @db.Uuid
+
+  // Relaciones
+  solicitud       Solicitud   @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
+  validador       PerfilFuncionario? @relation(fields: [validadorId], references: [id], onDelete: SetNull)
+
+  @@map("documentos_solicitud")
+}
+
+// Tabla: sesion_comision
+model SesionComision {
+  id              String          @id @default(uuid()) @db.Uuid
+  periodoId       String          @db.Uuid
+  fecha           DateTime        @db.Date 
+  actaUrl         String?
+  municipio       String
+
+  // Relaciones
+  periodo         PeriodoOtorgamiento @relation(fields: [periodoId], references: [id], onDelete: Cascade)
+  decisiones      DecisionSolicitud[]
+
+  @@map("sesiones_comision")
+}
+
+// Tabla: decision_solicitud
+model DecisionSolicitud {
+  id              String          @id @default(uuid()) @db.Uuid
+  solicitudId     String          @db.Uuid
+  sesionId        String          @db.Uuid
+  comisionId      String          @db.Uuid
+  resultado       ResultadoDecision
+  puntuacion      Int
+  observaciones   String?
+
+  // Relaciones
+  solicitud       Solicitud       @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
+  sesion          SesionComision  @relation(fields: [sesionId], references: [id], onDelete: Cascade)
+  comision        PerfilComision  @relation(fields: [comisionId], references: [id], onDelete: Cascade)
+
+  @@map("decisiones_solicitud")
+}
+
+// Tabla: matricula
+model Matricula {
+  id              String          @id @default(uuid()) @db.Uuid
+  solicitudId     String          @unique @db.Uuid
+  circuloId       String          @db.Uuid
+  fechaOtorgamiento DateTime      @db.Timestamp  
+  fechaLimite     DateTime        @db.Date 
+  estado          EstadoMatricula @default(ACTIVA)
+  boletaUrl       String?
+  folio           String          @unique
+
+  // Relaciones
+  solicitud       Solicitud       @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
+  circulo         CirculoInfantil @relation(fields: [circuloId], references: [id], onDelete: Cascade)
+  controles       ControlTrimestral[]
+
+  @@map("matriculas")
+}
+
+// Tabla: control_trimestral
+model ControlTrimestral {
+  id              String      @id @default(uuid()) @db.Uuid
+  matriculaId     String      @db.Uuid
+  fecha           DateTime    @db.Date 
+  vinculo         VinculoLaboral
+  observaciones   String?
+  funcionarioId   String      @db.Uuid
+
+  // Relaciones
+  matricula       Matricula   @relation(fields: [matriculaId], references: [id], onDelete: Cascade)
+  funcionario     PerfilFuncionario @relation(fields: [funcionarioId], references: [id], onDelete: Cascade)
+
+  @@map("controles_trimestrales")
+}
+
+// Tabla: trazabilidad
+model Trazabilidad {
+  id              String      @id @default(uuid()) @db.Uuid
+  solicitudId     String      @db.Uuid
+  estadoAnterior  EstadoSolicitud
+  estadoNuevo     EstadoSolicitud
+  fecha           DateTime    @default(now()) @db.Timestamp  
+  usuarioId       String      @db.Uuid
+  comentario      String?
+
+  // Relaciones
+  solicitud       Solicitud   @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
+  usuario         PerfilFuncionario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@map("trazabilidades")
+}
+
+// Tabla: notificacion
+model Notificacion {
+  id              String    @id @default(uuid()) @db.Uuid
+  usuarioId       String    @db.Uuid
+  titulo          String
+  mensaje         String
+  leida           Boolean   @default(false)
+  fecha           DateTime  @default(now()) @db.Timestamp  
+  tipo            String
+
+  // Relaciones
+  usuario         Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@map("notificaciones")
+}

@@ -1,0 +1,5 @@
+export enum TipoSolicitud {
+  TRABAJADOR = 'TRABAJADOR',
+  ESTUDIANTE = 'ESTUDIANTE',
+  CASO_SOCIAL = 'CASO_SOCIAL',
+}
