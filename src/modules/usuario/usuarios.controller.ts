@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-// usuarios.controller.ts
 import {
   Controller,
   Get,
@@ -19,14 +18,16 @@ import {
   ApiParam,
   ApiBearerAuth,
   ApiQuery,
+  ApiBody,
 } from '@nestjs/swagger';
 import { Roles } from '../../auth/decorators/roles.decorator';
-import { RolUsuario } from '../../common/index';
+import { RolUsuario } from '@prisma/client';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { UsuariosService } from './usuarios.service';
 import { CreateUsuarioDto } from './dto/create-usuario.dto';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto';
+import { UsuarioResponseDto } from './dto/usuario-response.dto';
 
 @ApiTags('Usuarios')
 @ApiBearerAuth()
@@ -38,10 +39,16 @@ export class UsuariosController {
   @Post()
   @Roles(RolUsuario.ADMINISTRADOR)
   @ApiOperation({ summary: 'Crear nuevo usuario' })
-  @ApiResponse({ status: 201, description: 'Usuario creado exitosamente' })
+  @ApiResponse({
+    status: 201,
+    description: 'Usuario creado exitosamente',
+    type: UsuarioResponseDto,
+  })
   @ApiResponse({ status: 400, description: 'Datos inválidos' })
   @ApiResponse({ status: 409, description: 'El email ya está registrado' })
-  create(@Body() createUsuarioDto: CreateUsuarioDto) {
+  create(
+    @Body() createUsuarioDto: CreateUsuarioDto,
+  ): Promise<UsuarioResponseDto> {
     return this.usuariosService.create(createUsuarioDto);
   }
 
@@ -77,14 +84,18 @@ export class UsuariosController {
     required: false,
     description: 'Filtrar por municipio (en cualquiera de los perfiles)',
   })
-  @ApiResponse({ status: 200, description: 'Lista de usuarios' })
+  @ApiResponse({
+    status: 200,
+    description: 'Lista de usuarios',
+    type: [UsuarioResponseDto],
+  })
   findAll(
     @Query('rol') rol?: RolUsuario,
     @Query('activo') activo?: boolean,
     @Query('email') email?: string,
     @Query('nombre') nombre?: string,
     @Query('municipio') municipio?: string,
-  ) {
+  ): Promise<UsuarioResponseDto[]> {
     return this.usuariosService.findAll({
       rol,
       activo: activo !== undefined ? Boolean(activo) : undefined,
@@ -106,12 +117,13 @@ export class UsuariosController {
   @ApiResponse({
     status: 200,
     description: 'Lista de usuarios filtrados por rol',
+    type: [UsuarioResponseDto],
   })
   @ApiResponse({
     status: 400,
     description: 'Parámetro de rol requerido',
   })
-  findByRol(@Query('rol') rol: RolUsuario) {
+  findByRol(@Query('rol') rol: RolUsuario): Promise<UsuarioResponseDto[]> {
     return this.usuariosService.findByRol(rol);
   }
 
@@ -119,47 +131,19 @@ export class UsuariosController {
   @Roles(RolUsuario.ADMINISTRADOR)
   @ApiOperation({ summary: 'Obtener estadísticas de usuarios por rol' })
   @ApiResponse({ status: 200, description: 'Estadísticas de usuarios por rol' })
-  async getEstadisticasRoles() {
-    const usuarios = await this.usuariosService.findAll();
-
-    const estadisticas = {
-      ADMINISTRADOR: 0,
-      SOLICITANTE: 0,
-      FUNCIONARIO_MUNICIPAL: 0,
-      COMISION_OTORGAMIENTO: 0,
-      DIRECTOR_CIRCULO: 0,
-    };
-
-    usuarios.forEach((usuario) => {
-      if (estadisticas[usuario.rol] !== undefined) {
-        estadisticas[usuario.rol]++;
-      }
-    });
-
-    const total = usuarios.length;
-
-    return {
-      total,
-      estadisticas,
-      porcentajes: {
-        ADMINISTRADOR:
-          total > 0 ? (estadisticas.ADMINISTRADOR / total) * 100 : 0,
-        SOLICITANTE: total > 0 ? (estadisticas.SOLICITANTE / total) * 100 : 0,
-        FUNCIONARIO_MUNICIPAL:
-          total > 0 ? (estadisticas.FUNCIONARIO_MUNICIPAL / total) * 100 : 0,
-        COMISION_OTORGAMIENTO:
-          total > 0 ? (estadisticas.COMISION_OTORGAMIENTO / total) * 100 : 0,
-        DIRECTOR_CIRCULO:
-          total > 0 ? (estadisticas.DIRECTOR_CIRCULO / total) * 100 : 0,
-      },
-    };
+  getEstadisticasRoles() {
+    return this.usuariosService.getEstadisticas();
   }
 
   @Get('activos')
   @Roles(RolUsuario.ADMINISTRADOR, RolUsuario.FUNCIONARIO_MUNICIPAL)
   @ApiOperation({ summary: 'Obtener usuarios activos' })
-  @ApiResponse({ status: 200, description: 'Lista de usuarios activos' })
-  findActivos() {
+  @ApiResponse({
+    status: 200,
+    description: 'Lista de usuarios activos',
+    type: [UsuarioResponseDto],
+  })
+  findActivos(): Promise<UsuarioResponseDto[]> {
     return this.usuariosService.findAll({ activo: true });
   }
 
@@ -167,65 +151,142 @@ export class UsuariosController {
   @Roles(RolUsuario.ADMINISTRADOR)
   @ApiOperation({ summary: 'Buscar usuario por email' })
   @ApiParam({ name: 'email', description: 'Email del usuario' })
-  @ApiResponse({ status: 200, description: 'Usuario encontrado' })
+  @ApiResponse({
+    status: 200,
+    description: 'Usuario encontrado',
+    type: UsuarioResponseDto,
+  })
   @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
-  async findByEmail(@Param('email') email: string) {
+  async findByEmail(
+    @Param('email') email: string,
+  ): Promise<UsuarioResponseDto | { message: string }> {
     const usuario = await this.usuariosService.findByEmail(email);
 
     if (!usuario) {
       return { message: `Usuario con email ${email} no encontrado` };
     }
 
-    const { password, ...result } = usuario;
-    return result;
+    return usuario;
   }
 
   @Get(':id')
   @Roles(RolUsuario.ADMINISTRADOR, RolUsuario.FUNCIONARIO_MUNICIPAL)
   @ApiOperation({ summary: 'Obtener usuario por ID' })
   @ApiParam({ name: 'id', description: 'ID del usuario' })
-  @ApiResponse({ status: 200, description: 'Usuario encontrado' })
+  @ApiResponse({
+    status: 200,
+    description: 'Usuario encontrado',
+    type: UsuarioResponseDto,
+  })
   @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
+  findOne(@Param('id', ParseUUIDPipe) id: string): Promise<UsuarioResponseDto> {
     return this.usuariosService.findOne(id);
   }
 
   @Patch(':id')
   @Roles(RolUsuario.ADMINISTRADOR)
-  @ApiOperation({ summary: 'Actualizar usuario' })
+  @ApiOperation({ summary: 'Actualizar correo del usuario' })
   @ApiParam({ name: 'id', description: 'ID del usuario' })
-  @ApiResponse({ status: 200, description: 'Usuario actualizado' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        email: { type: 'string', example: 'nuevoemail@ejemplo.com' },
+      },
+      required: ['email'],
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Email actualizado',
+    schema: {
+      type: 'object',
+      properties: {
+        message: {
+          type: 'string',
+          example:
+            'El email del usuario {id} ha sido actualizado correctamente',
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
-  update(
+  @ApiResponse({ status: 409, description: 'El email ya está registrado' })
+  updateEmail(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() updateUsuarioDto: UpdateUsuarioDto,
-  ) {
-    return this.usuariosService.update(id, updateUsuarioDto);
+    @Body('email') email: string,
+  ): Promise<{ message: string }> {
+    return this.usuariosService.updateEmail(id, email);
   }
 
   @Patch(':id/activar')
   @Roles(RolUsuario.ADMINISTRADOR)
   @ApiOperation({ summary: 'Activar/desactivar usuario' })
   @ApiParam({ name: 'id', description: 'ID del usuario' })
-  @ApiResponse({ status: 200, description: 'Estado actualizado' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        activo: { type: 'boolean', example: true },
+      },
+      required: ['activo'],
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Estado actualizado',
+    schema: {
+      type: 'object',
+      properties: {
+        message: {
+          type: 'string',
+          example: 'Usuario {id} activado/desactivado correctamente',
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
   async toggleActivo(
     @Param('id', ParseUUIDPipe) id: string,
     @Body('activo') activo: boolean,
-  ) {
-    return this.usuariosService.update(id, { activo } as UpdateUsuarioDto);
+  ): Promise<{ message: string }> {
+    return this.usuariosService.toggleActivo(id, activo);
   }
 
   @Patch(':id/actualizar-token')
   @Roles(RolUsuario.ADMINISTRADOR)
   @ApiOperation({ summary: 'Actualizar refresh token del usuario' })
   @ApiParam({ name: 'id', description: 'ID del usuario' })
-  @ApiResponse({ status: 200, description: 'Token actualizado' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        refreshToken: {
+          type: 'string',
+          example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+        },
+      },
+      required: ['refreshToken'],
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Token actualizado',
+    schema: {
+      type: 'object',
+      properties: {
+        message: {
+          type: 'string',
+          example: 'Refresh token del usuario {id} actualizado correctamente',
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
   updateRefreshToken(
     @Param('id', ParseUUIDPipe) id: string,
     @Body('refreshToken') refreshToken: string,
-  ) {
+  ): Promise<{ message: string }> {
     return this.usuariosService.updateRefreshToken(id, refreshToken);
   }
 
@@ -233,9 +294,23 @@ export class UsuariosController {
   @Roles(RolUsuario.ADMINISTRADOR)
   @ApiOperation({ summary: 'Limpiar refresh token del usuario' })
   @ApiParam({ name: 'id', description: 'ID del usuario' })
-  @ApiResponse({ status: 200, description: 'Token limpiado' })
+  @ApiResponse({
+    status: 200,
+    description: 'Token limpiado',
+    schema: {
+      type: 'object',
+      properties: {
+        message: {
+          type: 'string',
+          example: 'Refresh token del usuario {id} limpiado correctamente',
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
-  clearRefreshToken(@Param('id', ParseUUIDPipe) id: string) {
+  clearRefreshToken(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{ message: string }> {
     return this.usuariosService.clearRefreshToken(id);
   }
 
@@ -243,9 +318,21 @@ export class UsuariosController {
   @Roles(RolUsuario.ADMINISTRADOR)
   @ApiOperation({ summary: 'Eliminar usuario' })
   @ApiParam({ name: 'id', description: 'ID del usuario' })
-  @ApiResponse({ status: 200, description: 'Usuario eliminado' })
+  @ApiResponse({
+    status: 200,
+    description: 'Usuario eliminado',
+    schema: {
+      type: 'object',
+      properties: {
+        message: {
+          type: 'string',
+          example: 'Usuario con ID {id} eliminado exitosamente',
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
-  remove(@Param('id', ParseUUIDPipe) id: string) {
+  remove(@Param('id', ParseUUIDPipe) id: string): Promise<{ message: string }> {
     return this.usuariosService.remove(id);
   }
 }

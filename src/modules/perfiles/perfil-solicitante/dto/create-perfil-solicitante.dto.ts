@@ -28,6 +28,10 @@ export class CreatePerfilSolicitanteDto {
   @IsString()
   municipio: string;
 
+  @ApiProperty()
+  @IsString()
+  provincia: string;
+
   @ApiProperty({ enum: TipoPersona })
   @IsEnum(TipoPersona)
   tipoPersona: TipoPersona;

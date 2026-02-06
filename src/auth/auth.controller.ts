@@ -23,6 +23,9 @@ import { RegisterDto } from './dto/register.dto';
 import { TokensDto } from './dto/token.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { Public } from './decorators/public.decorator';
+import { LoginResponseDto } from './dto/login-response.dto';
+import { ProfileResponseDto } from './dto/profile-response.dto';
+import { RegisterResponseDto } from './dto/register-response.dto';
 
 @ApiTags('Autenticación')
 @Controller('auth')
@@ -36,46 +39,27 @@ export class AuthController {
   @ApiResponse({
     status: 200,
     description: 'Inicio de sesión exitoso',
-    schema: {
-      type: 'object',
-      properties: {
-        tokens: {
-          $ref: '#/components/schemas/TokensDto',
-        },
-        user: {
-          type: 'object',
-          properties: {
-            id: { type: 'string' },
-            email: { type: 'string' },
-            rol: { type: 'string' },
-            activo: { type: 'boolean' },
-            createdAt: { type: 'string', format: 'date-time' },
-            updatedAt: { type: 'string', format: 'date-time' },
-            perfilSolicitante: { type: 'object', nullable: true },
-          },
-        },
-      },
-    },
+    type: LoginResponseDto,
   })
   @ApiResponse({ status: 401, description: 'Credenciales incorrectas' })
-  async login(@Body() loginDto: LoginDto) {
+  async login(@Body() loginDto: LoginDto): Promise<LoginResponseDto> {
     return this.authService.login(loginDto);
   }
 
   @Public()
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Registrar nuevo usuario (solicitante)' })
+  @ApiOperation({ summary: 'Registrar nuevo usuario' })
   @ApiResponse({
     status: 201,
-    description: 'Usuario registrado exitosamente como SOLICITANTE',
+    description: 'Usuario registrado exitosamente',
+    type: RegisterResponseDto,
   })
-  @ApiResponse({
-    status: 409,
-    description: 'El email o carnet de identidad ya está registrado',
-  })
+  @ApiResponse({ status: 409, description: 'El email ya está registrado' })
   @ApiResponse({ status: 400, description: 'Datos de registro inválidos' })
-  async register(@Body() registerDto: RegisterDto) {
+  async register(
+    @Body() registerDto: RegisterDto,
+  ): Promise<RegisterResponseDto> {
     return this.authService.register(registerDto);
   }
 
@@ -84,7 +68,7 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Cerrar sesión' })
   @ApiResponse({ status: 200, description: 'Sesión cerrada exitosamente' })
-  async logout(@Request() req) {
+  async logout(@Request() req): Promise<{ message: string }> {
     return this.authService.logout(req.user.id);
   }
 
@@ -116,7 +100,7 @@ export class AuthController {
   async refreshTokens(
     @Body('refreshToken') refreshToken: string,
     @Body('userId') userId: string,
-  ) {
+  ): Promise<TokensDto> {
     return this.authService.refreshTokens(userId, refreshToken);
   }
 
@@ -124,8 +108,12 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener perfil del usuario autenticado' })
-  @ApiResponse({ status: 200, description: 'Perfil obtenido exitosamente' })
-  async getProfile(@Request() req) {
+  @ApiResponse({
+    status: 200,
+    description: 'Perfil obtenido exitosamente',
+    type: ProfileResponseDto,
+  })
+  async getProfile(@Request() req): Promise<ProfileResponseDto> {
     return this.authService.getProfile(req.user.id);
   }
 }

@@ -26,4 +26,8 @@ export class CreatePerfilFuncionarioDto {
   @ApiProperty()
   @IsString()
   municipio: string;
+
+  @ApiProperty()
+  @IsString()
+  provincia: string;
 }

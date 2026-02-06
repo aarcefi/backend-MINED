@@ -37,6 +37,10 @@ export class DatosSolicitanteDto {
   @IsString()
   municipio: string;
 
+  @ApiProperty({ example: 'La Habana' })
+  @IsString()
+  provincia: string;
+
   @ApiProperty({ enum: TipoPersona })
   @IsEnum(TipoPersona)
   tipoPersona: TipoPersona;

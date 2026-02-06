@@ -20,5 +20,9 @@ export class CreatePerfilComisionDto {
 
   @ApiProperty()
   @IsString()
+  provincia: string;
+
+  @ApiProperty()
+  @IsString()
   cargo: string;
 }

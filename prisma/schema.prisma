@@ -116,6 +116,7 @@ model PerfilSolicitante {
   telefono        String?
   direccion       String
   municipio       String
+  provincia       String
   tipoPersona     TipoPersona
   cantHijos       Int                 @default(1)
 
@@ -137,6 +138,7 @@ model PerfilFuncionario {
   telefono        String?
   cargo           String
   municipio       String
+  provincia       String
 
   // Relaciones
   usuario         Usuario             @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
@@ -155,6 +157,7 @@ model PerfilComision {
   apellidos       String
   carnetIdentidad String          @unique
   municipio       String
+  provincia       String
   cargo           String
 
   // Relaciones
