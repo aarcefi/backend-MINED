@@ -1,9 +1,10 @@
 import { RolUsuario } from '@prisma/client';
 
 export interface JwtPayload {
-  sub: string; // user ID
+  sub: string;
   email: string;
   rol: RolUsuario;
-  iat?: number; // issued at
-  exp?: number; // expiration
+  perfilId?: string;
+  iat?: number;
+  exp?: number;
 }

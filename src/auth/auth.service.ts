@@ -198,13 +198,29 @@ export class AuthService {
   }
 
   private async generateTokens(usuario: any): Promise<TokensDto> {
+    let perfilId: string | undefined;
+
+    switch (usuario.rol) {
+      case RolUsuario.SOLICITANTE:
+        perfilId = usuario.perfilSolicitante?.id;
+        break;
+      case RolUsuario.FUNCIONARIO_MUNICIPAL:
+        perfilId = usuario.perfilFuncionario?.id;
+        break;
+      case RolUsuario.COMISION_OTORGAMIENTO:
+        perfilId = usuario.perfilComision?.id;
+        break;
+      default:
+        perfilId = undefined;
+    }
+
     const payload = {
       sub: usuario.id,
       email: usuario.email,
       rol: usuario.rol,
+      perfilId: perfilId,
     };
 
-    // Obtener tiempos de expiración usando nuestra función helper
     const accessTokenExpiresIn = parseExpiresIn(
       this.configService.get<string>('JWT_EXPIRES_IN', '3600'), // Default: 3600 segundos (1 hora)
     );
@@ -293,7 +309,6 @@ export class AuthService {
       case RolUsuario.COMISION_OTORGAMIENTO:
         response.perfilComision = userData.perfilComision;
         break;
-      // Para otros roles (DIRECTOR_CIRCULO, ADMINISTRADOR) no se incluye perfil
     }
 
     if (userData.notificaciones) {

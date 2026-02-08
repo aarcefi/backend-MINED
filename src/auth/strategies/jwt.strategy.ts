@@ -48,12 +48,26 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     const { password, ...user } = usuario;
 
+    let perfilId: string | undefined;
+    let perfil: any;
+
+    if (user.perfilSolicitante) {
+      perfilId = user.perfilSolicitante.id;
+      perfil = user.perfilSolicitante;
+    } else if (user.perfilFuncionario) {
+      perfilId = user.perfilFuncionario.id;
+      perfil = user.perfilFuncionario;
+    } else if (user.perfilComision) {
+      perfilId = user.perfilComision.id;
+      perfil = user.perfilComision;
+    }
+
     return {
       id: user.id,
       email: user.email,
       rol: user.rol,
-      perfil:
-        user.perfilSolicitante || user.perfilFuncionario || user.perfilComision,
+      perfilId,
+      perfil,
     };
   }
 }

@@ -33,7 +33,6 @@ enum SectorPrioridad {
 }
 
 enum EstadoSolicitud {
-  RECIBIDA
   EN_REVISION
   APROBADA
   RECHAZADA
