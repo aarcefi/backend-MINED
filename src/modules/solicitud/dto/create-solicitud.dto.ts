@@ -4,27 +4,53 @@ import {
   IsEnum,
   IsString,
   IsOptional,
+  ValidateNested,
+  IsBoolean,
   IsDateString,
-  Length,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import {
   SectorPrioridad,
   TipoSolicitud,
   EstadoSolicitud,
 } from '../../../common/enums';
 
+export class NinoDataDto {
+  @ApiProperty({ example: 'Juan' })
+  @IsString()
+  nombre: string;
+
+  @ApiProperty({ example: 'Pérez López' })
+  @IsString()
+  apellidos: string;
+
+  @ApiProperty({ example: '2020-05-15' })
+  @IsDateString()
+  fechaNacimiento: string; // Cambiar a string
+
+  @ApiProperty({ example: 'MASCULINO' })
+  @IsString()
+  sexo: string;
+
+  @ApiProperty({ example: 'TM123456789' })
+  @IsString()
+  tarjetaMenor: string;
+
+  @ApiProperty({ required: false, default: false })
+  @IsOptional()
+  @IsBoolean()
+  casoEspecial?: boolean = false;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  tipoNecesidad?: string;
+}
+
 export class CreateSolicitudDto {
   @ApiProperty()
   @IsUUID()
-  ninoId: string;
-
-  @ApiProperty()
-  @IsUUID()
   solicitanteId: string;
-
-  @ApiProperty()
-  @IsDateString()
-  fechaSolicitud: string;
 
   @ApiProperty({ enum: SectorPrioridad })
   @IsEnum(SectorPrioridad)
@@ -34,21 +60,17 @@ export class CreateSolicitudDto {
   @IsEnum(TipoSolicitud)
   tipoSolicitud: TipoSolicitud;
 
-  @ApiProperty({ enum: EstadoSolicitud })
+  @ApiProperty({ enum: EstadoSolicitud, default: EstadoSolicitud.EN_REVISION })
   @IsEnum(EstadoSolicitud)
-  estado: EstadoSolicitud;
-
-  @ApiProperty()
-  @IsUUID()
-  periodoId: string;
-
-  @ApiProperty()
-  @IsString()
-  @Length(1, 50)
-  numeroRegistro: string;
+  estado: EstadoSolicitud = EstadoSolicitud.EN_REVISION;
 
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   observaciones?: string;
+
+  @ApiProperty()
+  @ValidateNested()
+  @Type(() => NinoDataDto)
+  nino: NinoDataDto;
 }

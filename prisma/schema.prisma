@@ -102,6 +102,8 @@ model Usuario {
   // Relación con Notificaciones
   notificaciones  Notificacion[]
 
+    trazas          Trazabilidad[]
+
   @@map("usuarios")
 }
 
@@ -143,7 +145,6 @@ model PerfilFuncionario {
   usuario         Usuario             @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
   documentosVal   DocumentoSolicitud[]
   controles       ControlTrimestral[]
-  trazas          Trazabilidad[]
 
   @@map("perfiles_funcionarios")
 }
@@ -361,7 +362,7 @@ model Trazabilidad {
 
   // Relaciones
   solicitud       Solicitud   @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
-  usuario         PerfilFuncionario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuario         Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
   @@map("trazabilidades")
 }

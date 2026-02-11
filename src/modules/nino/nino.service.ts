@@ -387,19 +387,6 @@ export class NinosService {
       throw new NotFoundException(`Niño con ID ${id} no encontrado`);
     }
 
-    // Si se actualiza el solicitanteId, verificar que existe
-    if (updateNinoDto.solicitanteId) {
-      const solicitante = await this.prisma.perfilSolicitante.findUnique({
-        where: { id: updateNinoDto.solicitanteId },
-      });
-
-      if (!solicitante) {
-        throw new NotFoundException(
-          `Solicitante con ID ${updateNinoDto.solicitanteId} no encontrado`,
-        );
-      }
-    }
-
     // Si se actualiza la tarjeta del menor, verificar que no esté en uso por otro niño
     if (
       updateNinoDto.tarjetaMenor &&
