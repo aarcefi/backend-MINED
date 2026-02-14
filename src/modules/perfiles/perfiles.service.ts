@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreatePerfilSolicitanteDto } from './perfil-solicitante/dto/create-perfil-solicitante.dto';
@@ -30,7 +31,15 @@ export class PerfilesService {
     return this.prisma.perfilSolicitante.findUnique({
       where: { usuarioId },
       include: {
-        usuario: true,
+        usuario: {
+          include: {
+            trazas: {
+              orderBy: {
+                fecha: 'desc',
+              },
+            },
+          },
+        },
         hijos: true,
         solicitudes: {
           include: {
@@ -63,10 +72,17 @@ export class PerfilesService {
     return this.prisma.perfilFuncionario.findUnique({
       where: { usuarioId },
       include: {
-        usuario: true,
+        usuario: {
+          include: {
+            trazas: {
+              orderBy: {
+                fecha: 'desc',
+              },
+            },
+          },
+        },
         documentosVal: true,
         controles: true,
-        trazas: true,
       },
     });
   }
@@ -75,7 +91,13 @@ export class PerfilesService {
     return this.prisma.perfilFuncionario.findMany({
       where: { municipio },
       include: {
-        usuario: true,
+        usuario: {
+          include: {
+            trazas: {
+              orderBy: { fecha: 'desc' },
+            },
+          },
+        },
       },
     });
   }
@@ -100,7 +122,15 @@ export class PerfilesService {
     return this.prisma.perfilComision.findUnique({
       where: { usuarioId },
       include: {
-        usuario: true,
+        usuario: {
+          include: {
+            trazas: {
+              orderBy: {
+                fecha: 'desc',
+              },
+            },
+          },
+        },
         decisiones: {
           include: {
             solicitud: true,
@@ -115,7 +145,13 @@ export class PerfilesService {
     return this.prisma.perfilComision.findMany({
       where: { municipio },
       include: {
-        usuario: true,
+        usuario: {
+          include: {
+            trazas: {
+              orderBy: { fecha: 'desc' },
+            },
+          },
+        },
         decisiones: true,
       },
     });
@@ -129,6 +165,9 @@ export class PerfilesService {
         perfilSolicitante: true,
         perfilFuncionario: true,
         perfilComision: true,
+        trazas: {
+          orderBy: { fecha: 'desc' },
+        },
       },
     });
 
@@ -136,6 +175,7 @@ export class PerfilesService {
       throw new NotFoundException('Usuario no encontrado');
     }
 
+    // Se retorna el perfil correspondiente; las trazas están disponibles en usuario.trazas
     return (
       usuario.perfilSolicitante ||
       usuario.perfilFuncionario ||

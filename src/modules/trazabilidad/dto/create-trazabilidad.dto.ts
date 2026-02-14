@@ -6,7 +6,7 @@ import {
   IsOptional,
   IsDateString,
 } from 'class-validator';
-import { EstadoSolicitud } from 'src/common';
+import { EstadoSolicitud } from '@prisma/client';
 
 export class CreateTrazabilidadDto {
   @ApiProperty()
@@ -16,7 +16,7 @@ export class CreateTrazabilidadDto {
   @ApiProperty()
   @IsString()
   @Length(2, 50)
-  estadoAnterior: EstadoSolicitud;
+  estadoAnterior?: EstadoSolicitud | null;
 
   @ApiProperty()
   @IsString()

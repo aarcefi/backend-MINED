@@ -238,7 +238,7 @@ model CapacidadCirculo {
   @@map("capacidades_circulos")
 }
 
-// Tabla: solicitud
+// Tabla:   tud
 model Solicitud {
   id              String             @id @default(uuid()) @db.Uuid
   ninoId          String             @unique @db.Uuid
@@ -246,9 +246,8 @@ model Solicitud {
   fechaSolicitud  DateTime           @default(now()) @db.Timestamp  
   sector          SectorPrioridad
   tipoSolicitud   TipoSolicitud
-  estado          EstadoSolicitud    @default(RECIBIDA)
+  estado          EstadoSolicitud    @default(EN_REVISION)
   periodoId       String             @db.Uuid
-  numeroRegistro  String             @unique
   observaciones   String?
   prioridad       Int               @default(0)
 
@@ -354,7 +353,7 @@ model ControlTrimestral {
 model Trazabilidad {
   id              String      @id @default(uuid()) @db.Uuid
   solicitudId     String      @db.Uuid
-  estadoAnterior  EstadoSolicitud
+  estadoAnterior  EstadoSolicitud?
   estadoNuevo     EstadoSolicitud
   fecha           DateTime    @default(now()) @db.Timestamp  
   usuarioId       String      @db.Uuid

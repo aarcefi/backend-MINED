@@ -18,7 +18,7 @@ export class CreateNinoDto {
 
   @ApiProperty()
   @IsDateString()
-  fechaNacimiento: Date;
+  fechaNacimiento: string;
 
   @ApiProperty()
   @IsString()
@@ -30,7 +30,7 @@ export class CreateNinoDto {
 
   @ApiProperty()
   @IsUUID()
-  solicitanteId: string; // ID del PerfilSolicitante
+  solicitanteId: string;
 
   @ApiProperty({ required: false, default: false })
   @IsOptional()

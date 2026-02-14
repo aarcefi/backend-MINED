@@ -3,7 +3,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateTrazabilidadDto, UpdateTrazabilidadDto } from './dto';
-import { EstadoSolicitud } from 'src/common/index';
+import { EstadoSolicitud } from '@prisma/client';
 
 @Injectable()
 export class TrazabilidadService {
@@ -21,8 +21,8 @@ export class TrazabilidadService {
       );
     }
 
-    // Verificar que el usuario existe
-    const usuario = await this.prisma.perfilFuncionario.findUnique({
+    // CORRECCIÓN: Verificar que el usuario existe en la tabla Usuario
+    const usuario = await this.prisma.usuario.findUnique({
       where: { id: data.usuarioId },
     });
 
@@ -243,7 +243,7 @@ export class TrazabilidadService {
     // Agrupar por usuario
     const porUsuario: Record<string, number> = {};
     trazabilidades.forEach((t) => {
-      const nombreUsuario = t.usuario?.nombre || 'Desconocido';
+      const nombreUsuario = t.usuario?.email || 'Desconocido';
       porUsuario[nombreUsuario] = (porUsuario[nombreUsuario] || 0) + 1;
     });
 
@@ -273,7 +273,7 @@ export class TrazabilidadService {
 
   async crearTrazabilidadAutomatica(
     solicitudId: string,
-    estadoAnterior: EstadoSolicitud,
+    estadoAnterior: EstadoSolicitud | null,
     estadoNuevo: EstadoSolicitud,
     usuarioId: string,
     comentario?: string,
