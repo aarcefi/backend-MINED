@@ -88,6 +88,13 @@ model Usuario {
   email           String    @unique
   password        String
   rol             RolUsuario
+  nombre          String
+  apellidos       String
+  carnetIdentidad String    @unique
+  telefono        String?
+  municipio       String
+  provincia       String
+
   activo          Boolean   @default(true)
   createdAt       DateTime  @default(now()) @db.Timestamp
   updatedAt       DateTime  @updatedAt @db.Timestamp
@@ -98,6 +105,7 @@ model Usuario {
   perfilSolicitante   PerfilSolicitante?
   perfilFuncionario   PerfilFuncionario?
   perfilComision      PerfilComision?
+  perfilDirector      PerfilDirector?
 
   // Relación con Notificaciones
   notificaciones  Notificacion[]
@@ -111,13 +119,7 @@ model Usuario {
 model PerfilSolicitante {
   id              String              @id @default(uuid()) @db.Uuid
   usuarioId       String              @unique @db.Uuid
-  nombre          String
-  apellidos       String
-  carnetIdentidad String              @unique
-  telefono        String?
   direccion       String
-  municipio       String
-  provincia       String
   tipoPersona     TipoPersona
   cantHijos       Int                 @default(1)
 
@@ -133,13 +135,7 @@ model PerfilSolicitante {
 model PerfilFuncionario {
   id              String              @id @default(uuid()) @db.Uuid
   usuarioId       String              @unique @db.Uuid
-  nombre          String
-  apellidos       String
-  carnetIdentidad String              @unique
-  telefono        String?
   cargo           String
-  municipio       String
-  provincia       String
 
   // Relaciones
   usuario         Usuario             @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
@@ -153,11 +149,6 @@ model PerfilFuncionario {
 model PerfilComision {
   id              String          @id @default(uuid()) @db.Uuid
   usuarioId       String          @unique @db.Uuid
-  nombre          String
-  apellidos       String
-  carnetIdentidad String          @unique
-  municipio       String
-  provincia       String
   cargo           String
 
   // Relaciones
@@ -165,6 +156,19 @@ model PerfilComision {
   decisiones      DecisionSolicitud[]
 
   @@map("perfiles_comisiones")
+}
+
+// Tabla: Perfil de Directores de Circulos
+model PerfilDirector {
+  id              String    @id @default(uuid()) @db.Uuid
+  usuarioId       String    @unique @db.Uuid
+  circuloId       String    @unique @db.Uuid
+
+  // Relaciones
+  usuario         Usuario          @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  circulo         CirculoInfantil  @relation(fields: [circuloId], references: [id], onDelete: Cascade, name: "director_circulo")
+
+  @@map("perfiles_directores")
 }
 
 // Tabla: nino
@@ -201,6 +205,7 @@ model CirculoInfantil {
   // Relaciones
   capacidades     CapacidadCirculo[]
   matriculas      Matricula[]
+  director        PerfilDirector?    @relation("director_circulo")
 
   @@map("circulos_infantiles")
 }

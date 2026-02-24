@@ -1,9 +1,14 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreatePerfilSolicitanteDto } from './perfil-solicitante/dto/create-perfil-solicitante.dto';
 import { CreatePerfilFuncionarioDto } from './perfil-funcionario/dto/create-perfil-funcionario.dto';
 import { CreatePerfilComisionDto } from './perfil-comision/dto/create-perfil-comision.dto';
+import { CreatePerfilDirectorDto } from './perfil-director/create-perfil-director.dto';
+import { RolUsuario } from '@prisma/client';
 
 @Injectable()
 export class PerfilesService {
@@ -14,6 +19,17 @@ export class PerfilesService {
     usuarioId: string,
     createDto: CreatePerfilSolicitanteDto,
   ) {
+    // Verificar que el usuario existe y es solicitante
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id: usuarioId },
+    });
+    if (!usuario) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+    if (usuario.rol !== RolUsuario.SOLICITANTE) {
+      throw new NotFoundException('El usuario no tiene rol de solicitante');
+    }
+
     return this.prisma.perfilSolicitante.create({
       data: {
         usuarioId,
@@ -28,15 +44,13 @@ export class PerfilesService {
   }
 
   async findPerfilSolicitanteByUsuarioId(usuarioId: string) {
-    return this.prisma.perfilSolicitante.findUnique({
+    const perfil = await this.prisma.perfilSolicitante.findUnique({
       where: { usuarioId },
       include: {
         usuario: {
           include: {
-            trazas: {
-              orderBy: {
-                fecha: 'desc',
-              },
+            notificaciones: {
+              orderBy: { fecha: 'desc' },
             },
           },
         },
@@ -50,6 +64,12 @@ export class PerfilesService {
         },
       },
     });
+
+    if (!perfil) {
+      throw new NotFoundException('Perfil de solicitante no encontrado');
+    }
+
+    return perfil;
   }
 
   // PERFIL FUNCIONARIO
@@ -57,6 +77,16 @@ export class PerfilesService {
     usuarioId: string,
     createDto: CreatePerfilFuncionarioDto,
   ) {
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id: usuarioId },
+    });
+    if (!usuario) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+    if (usuario.rol !== RolUsuario.FUNCIONARIO_MUNICIPAL) {
+      throw new NotFoundException('El usuario no tiene rol de funcionario');
+    }
+
     return this.prisma.perfilFuncionario.create({
       data: {
         usuarioId,
@@ -69,15 +99,13 @@ export class PerfilesService {
   }
 
   async findPerfilFuncionarioByUsuarioId(usuarioId: string) {
-    return this.prisma.perfilFuncionario.findUnique({
+    const perfil = await this.prisma.perfilFuncionario.findUnique({
       where: { usuarioId },
       include: {
         usuario: {
           include: {
-            trazas: {
-              orderBy: {
-                fecha: 'desc',
-              },
+            notificaciones: {
+              orderBy: { fecha: 'desc' },
             },
           },
         },
@@ -85,21 +113,43 @@ export class PerfilesService {
         controles: true,
       },
     });
+
+    if (!perfil) {
+      throw new NotFoundException('Perfil de funcionario no encontrado');
+    }
+
+    return perfil;
   }
 
   async findFuncionariosByMunicipio(municipio: string) {
-    return this.prisma.perfilFuncionario.findMany({
-      where: { municipio },
+    const usuarios = await this.prisma.usuario.findMany({
+      where: {
+        rol: RolUsuario.FUNCIONARIO_MUNICIPAL,
+        municipio: { contains: municipio, mode: 'insensitive' },
+      },
       include: {
-        usuario: {
+        perfilFuncionario: {
           include: {
-            trazas: {
-              orderBy: { fecha: 'desc' },
-            },
+            documentosVal: true,
+            controles: true,
           },
         },
       },
     });
+
+    return usuarios.map((usuario) => ({
+      ...usuario.perfilFuncionario,
+      usuario: {
+        id: usuario.id,
+        email: usuario.email,
+        nombre: usuario.nombre,
+        apellidos: usuario.apellidos,
+        carnetIdentidad: usuario.carnetIdentidad,
+        telefono: usuario.telefono,
+        municipio: usuario.municipio,
+        provincia: usuario.provincia,
+      },
+    }));
   }
 
   // PERFIL COMISIÓN
@@ -107,6 +157,16 @@ export class PerfilesService {
     usuarioId: string,
     createDto: CreatePerfilComisionDto,
   ) {
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id: usuarioId },
+    });
+    if (!usuario) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+    if (usuario.rol !== RolUsuario.COMISION_OTORGAMIENTO) {
+      throw new NotFoundException('El usuario no tiene rol de comisión');
+    }
+
     return this.prisma.perfilComision.create({
       data: {
         usuarioId,
@@ -119,15 +179,13 @@ export class PerfilesService {
   }
 
   async findPerfilComisionByUsuarioId(usuarioId: string) {
-    return this.prisma.perfilComision.findUnique({
+    const perfil = await this.prisma.perfilComision.findUnique({
       where: { usuarioId },
       include: {
         usuario: {
           include: {
-            trazas: {
-              orderBy: {
-                fecha: 'desc',
-              },
+            notificaciones: {
+              orderBy: { fecha: 'desc' },
             },
           },
         },
@@ -139,25 +197,162 @@ export class PerfilesService {
         },
       },
     });
+
+    if (!perfil) {
+      throw new NotFoundException('Perfil de comisión no encontrado');
+    }
+
+    return perfil;
   }
 
   async findComisionByMunicipio(municipio: string) {
-    return this.prisma.perfilComision.findMany({
-      where: { municipio },
+    const usuarios = await this.prisma.usuario.findMany({
+      where: {
+        rol: RolUsuario.COMISION_OTORGAMIENTO,
+        municipio: { contains: municipio, mode: 'insensitive' },
+      },
       include: {
-        usuario: {
+        perfilComision: {
           include: {
-            trazas: {
-              orderBy: { fecha: 'desc' },
-            },
+            decisiones: true,
           },
         },
-        decisiones: true,
+      },
+    });
+
+    return usuarios.map((usuario) => ({
+      ...usuario.perfilComision,
+      usuario: {
+        id: usuario.id,
+        email: usuario.email,
+        nombre: usuario.nombre,
+        apellidos: usuario.apellidos,
+        carnetIdentidad: usuario.carnetIdentidad,
+        telefono: usuario.telefono,
+        municipio: usuario.municipio,
+        provincia: usuario.provincia,
+      },
+    }));
+  }
+
+  // PERFIL DIRECTOR
+  async createPerfilDirector(
+    usuarioId: string,
+    createDto: CreatePerfilDirectorDto,
+  ) {
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id: usuarioId },
+    });
+    if (!usuario) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+    if (usuario.rol !== RolUsuario.DIRECTOR_CIRCULO) {
+      throw new NotFoundException('El usuario no tiene rol de director');
+    }
+
+    // Verificar que el círculo existe
+    const circulo = await this.prisma.circuloInfantil.findUnique({
+      where: { id: createDto.circuloId },
+    });
+    if (!circulo) {
+      throw new NotFoundException('Círculo infantil no encontrado');
+    }
+
+    // Verificar que el círculo no tenga ya un director
+    const directorExistente = await this.prisma.perfilDirector.findUnique({
+      where: { circuloId: createDto.circuloId },
+    });
+    if (directorExistente) {
+      throw new ConflictException('El círculo ya tiene un director asignado');
+    }
+
+    return this.prisma.perfilDirector.create({
+      data: {
+        usuarioId,
+        circuloId: createDto.circuloId,
+      },
+      include: {
+        usuario: true,
+        circulo: true,
       },
     });
   }
 
-  // MÉTODOS GENERALES
+  async findPerfilDirectorByUsuarioId(usuarioId: string) {
+    const perfil = await this.prisma.perfilDirector.findUnique({
+      where: { usuarioId },
+      include: {
+        usuario: {
+          include: {
+            notificaciones: {
+              orderBy: { fecha: 'desc' },
+            },
+          },
+        },
+        circulo: true,
+      },
+    });
+
+    if (!perfil) {
+      throw new NotFoundException('Perfil de director no encontrado');
+    }
+
+    return perfil;
+  }
+
+  async findPerfilDirectorByCirculoId(circuloId: string) {
+    const perfil = await this.prisma.perfilDirector.findUnique({
+      where: { circuloId },
+      include: {
+        usuario: {
+          include: {
+            notificaciones: {
+              orderBy: { fecha: 'desc' },
+            },
+          },
+        },
+        circulo: true,
+      },
+    });
+
+    if (!perfil) {
+      throw new NotFoundException('No hay director asignado a ese círculo');
+    }
+
+    return perfil;
+  }
+
+  async findDirectoresByMunicipio(municipio: string) {
+    const usuarios = await this.prisma.usuario.findMany({
+      where: {
+        rol: RolUsuario.DIRECTOR_CIRCULO,
+        municipio: { contains: municipio, mode: 'insensitive' },
+      },
+      include: {
+        perfilDirector: {
+          include: {
+            circulo: true,
+          },
+        },
+      },
+    });
+
+    return usuarios.map((usuario) => ({
+      ...usuario.perfilDirector,
+      usuario: {
+        id: usuario.id,
+        email: usuario.email,
+        nombre: usuario.nombre,
+        apellidos: usuario.apellidos,
+        carnetIdentidad: usuario.carnetIdentidad,
+        telefono: usuario.telefono,
+        municipio: usuario.municipio,
+        provincia: usuario.provincia,
+      },
+    }));
+  }
+
+  // Modificar findPerfilByUsuarioId para incluir perfilDirector
   async findPerfilByUsuarioId(usuarioId: string) {
     const usuario = await this.prisma.usuario.findUnique({
       where: { id: usuarioId },
@@ -165,7 +360,11 @@ export class PerfilesService {
         perfilSolicitante: true,
         perfilFuncionario: true,
         perfilComision: true,
-        trazas: {
+        perfilDirector: {
+          // <-- AÑADIDO
+          include: { circulo: true },
+        },
+        notificaciones: {
           orderBy: { fecha: 'desc' },
         },
       },
@@ -175,11 +374,72 @@ export class PerfilesService {
       throw new NotFoundException('Usuario no encontrado');
     }
 
-    // Se retorna el perfil correspondiente; las trazas están disponibles en usuario.trazas
-    return (
-      usuario.perfilSolicitante ||
-      usuario.perfilFuncionario ||
-      usuario.perfilComision
-    );
+    // Retornar el perfil correspondiente junto con los datos del usuario
+    if (usuario.perfilSolicitante) {
+      return {
+        ...usuario.perfilSolicitante,
+        usuario: {
+          id: usuario.id,
+          email: usuario.email,
+          nombre: usuario.nombre,
+          apellidos: usuario.apellidos,
+          carnetIdentidad: usuario.carnetIdentidad,
+          telefono: usuario.telefono,
+          municipio: usuario.municipio,
+          provincia: usuario.provincia,
+        },
+      };
+    }
+
+    if (usuario.perfilFuncionario) {
+      return {
+        ...usuario.perfilFuncionario,
+        usuario: {
+          id: usuario.id,
+          email: usuario.email,
+          nombre: usuario.nombre,
+          apellidos: usuario.apellidos,
+          carnetIdentidad: usuario.carnetIdentidad,
+          telefono: usuario.telefono,
+          municipio: usuario.municipio,
+          provincia: usuario.provincia,
+        },
+      };
+    }
+
+    if (usuario.perfilComision) {
+      return {
+        ...usuario.perfilComision,
+        usuario: {
+          id: usuario.id,
+          email: usuario.email,
+          nombre: usuario.nombre,
+          apellidos: usuario.apellidos,
+          carnetIdentidad: usuario.carnetIdentidad,
+          telefono: usuario.telefono,
+          municipio: usuario.municipio,
+          provincia: usuario.provincia,
+        },
+      };
+    }
+
+    if (usuario.perfilDirector) {
+      // <-- AÑADIDO
+      return {
+        ...usuario.perfilDirector,
+        usuario: {
+          id: usuario.id,
+          email: usuario.email,
+          nombre: usuario.nombre,
+          apellidos: usuario.apellidos,
+          carnetIdentidad: usuario.carnetIdentidad,
+          telefono: usuario.telefono,
+          municipio: usuario.municipio,
+          provincia: usuario.provincia,
+        },
+      };
+    }
+
+    throw new NotFoundException('El usuario no tiene un perfil asociado');
   }
 }

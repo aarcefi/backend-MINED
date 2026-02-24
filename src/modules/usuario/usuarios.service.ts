@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateUsuarioDto } from './dto/create-usuario.dto';
@@ -12,6 +13,10 @@ import * as bcrypt from 'bcrypt';
 import { RolUsuario } from '@prisma/client';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto';
 import { UsuarioResponseDto } from './dto/usuario-response.dto';
+import { CreatePerfilSolicitanteDto } from '../perfiles/perfil-solicitante/dto/create-perfil-solicitante.dto';
+import { CreatePerfilFuncionarioDto } from '../perfiles/perfil-funcionario/dto/create-perfil-funcionario.dto';
+import { CreatePerfilComisionDto } from '../perfiles/perfil-comision/dto/create-perfil-comision.dto';
+import { CreatePerfilDirectorDto } from '../perfiles/perfil-director/create-perfil-director.dto';
 
 @Injectable()
 export class UsuariosService {
@@ -20,28 +25,102 @@ export class UsuariosService {
   async create(
     createUsuarioDto: CreateUsuarioDto,
   ): Promise<UsuarioResponseDto> {
-    // Verificar si el email ya existe
-    const usuarioExistente = await this.prisma.usuario.findUnique({
-      where: { email: createUsuarioDto.email },
-    });
+    // Validaciones de email y carnet (como antes)
 
-    if (usuarioExistente) {
-      throw new ConflictException('El email ya está registrado');
-    }
-
-    // Encriptar contraseña
     const hashedPassword = await bcrypt.hash(createUsuarioDto.password, 10);
 
-    const usuario = await this.prisma.usuario.create({
-      data: {
-        ...createUsuarioDto,
-        password: hashedPassword,
-      },
-      include: {
-        perfilSolicitante: true,
-        perfilFuncionario: true,
-        perfilComision: true,
-      },
+    // Usar transacción para crear usuario y perfil
+    const usuario = await this.prisma.$transaction(async (prisma) => {
+      // Crear usuario
+      const newUser = await prisma.usuario.create({
+        data: {
+          email: createUsuarioDto.email,
+          password: hashedPassword,
+          rol: createUsuarioDto.rol,
+          activo: createUsuarioDto.activo ?? true,
+          nombre: createUsuarioDto.nombre,
+          apellidos: createUsuarioDto.apellidos,
+          carnetIdentidad: createUsuarioDto.carnetIdentidad,
+          telefono: createUsuarioDto.telefono,
+          municipio: createUsuarioDto.municipio,
+          provincia: createUsuarioDto.provincia,
+        },
+      });
+
+      // Crear perfil según el rol
+      switch (createUsuarioDto.rol) {
+        case RolUsuario.SOLICITANTE: {
+          const solicitanteData =
+            createUsuarioDto.perfil as CreatePerfilSolicitanteDto;
+          await prisma.perfilSolicitante.create({
+            data: {
+              usuarioId: newUser.id,
+              tipoPersona: solicitanteData.tipoPersona,
+              cantHijos: solicitanteData.cantHijos ?? 1,
+              direccion: solicitanteData.direccion,
+            },
+          });
+          break;
+        }
+        case RolUsuario.FUNCIONARIO_MUNICIPAL: {
+          const funcionarioData =
+            createUsuarioDto.perfil as CreatePerfilFuncionarioDto;
+          await prisma.perfilFuncionario.create({
+            data: {
+              usuarioId: newUser.id,
+              cargo: funcionarioData.cargo,
+            },
+          });
+          break;
+        }
+        case RolUsuario.COMISION_OTORGAMIENTO: {
+          const comisionData =
+            createUsuarioDto.perfil as CreatePerfilComisionDto;
+          await prisma.perfilComision.create({
+            data: {
+              usuarioId: newUser.id,
+              cargo: comisionData.cargo,
+            },
+          });
+          break;
+        }
+        case RolUsuario.DIRECTOR_CIRCULO: {
+          const directorData =
+            createUsuarioDto.perfil as CreatePerfilDirectorDto;
+          // Verificar que el círculo existe y no tiene director
+          const circulo = await prisma.circuloInfantil.findUnique({
+            where: { id: directorData.circuloId },
+          });
+          if (!circulo) {
+            throw new NotFoundException('Círculo no encontrado');
+          }
+          const directorExistente = await prisma.perfilDirector.findUnique({
+            where: { circuloId: directorData.circuloId },
+          });
+          if (directorExistente) {
+            throw new ConflictException('El círculo ya tiene un director');
+          }
+          await prisma.perfilDirector.create({
+            data: {
+              usuarioId: newUser.id,
+              circuloId: directorData.circuloId,
+            },
+          });
+          break;
+        }
+        // Otros roles (ADMINISTRADOR) no tienen perfil
+      }
+
+      // Retornar el usuario completo con perfiles
+      return prisma.usuario.findUnique({
+        where: { id: newUser.id },
+        include: {
+          perfilSolicitante: true,
+          perfilFuncionario: true,
+          perfilComision: true,
+          perfilDirector: { include: { circulo: true } },
+        },
+      });
     });
 
     return this.toUsuarioResponseDto(usuario);
@@ -54,6 +133,7 @@ export class UsuariosService {
         perfilSolicitante: true,
         perfilFuncionario: true,
         perfilComision: true,
+        perfilDirector: true,
         notificaciones: true,
       },
     });
@@ -72,6 +152,7 @@ export class UsuariosService {
         perfilSolicitante: true,
         perfilFuncionario: true,
         perfilComision: true,
+        perfilDirector: true,
       },
     });
 
@@ -89,6 +170,7 @@ export class UsuariosService {
         perfilSolicitante: true,
         perfilFuncionario: true,
         perfilComision: true,
+        perfilDirector: true,
       },
     });
 
@@ -107,6 +189,7 @@ export class UsuariosService {
           perfilSolicitante: true,
           perfilFuncionario: true,
           perfilComision: true,
+          perfilDirector: true,
         },
       });
 
@@ -234,89 +317,19 @@ export class UsuariosService {
   }): Promise<UsuarioResponseDto[]> {
     const where: any = {};
 
-    if (filtros?.rol) {
-      where.rol = filtros.rol;
-    }
+    if (filtros?.rol) where.rol = filtros.rol;
+    if (filtros?.activo !== undefined) where.activo = filtros.activo;
 
     if (filtros?.email) {
-      where.email = {
-        contains: filtros.email,
-        mode: 'insensitive',
-      };
+      where.email = { contains: filtros.email, mode: 'insensitive' };
     }
 
     if (filtros?.nombre) {
-      where.OR = [
-        {
-          perfilSolicitante: {
-            nombre: {
-              contains: filtros.nombre,
-              mode: 'insensitive',
-            },
-          },
-        },
-        {
-          perfilFuncionario: {
-            nombre: {
-              contains: filtros.nombre,
-              mode: 'insensitive',
-            },
-          },
-        },
-        {
-          perfilComision: {
-            nombre: {
-              contains: filtros.nombre,
-              mode: 'insensitive',
-            },
-          },
-        },
-        {
-          perfilDirector: {
-            nombre: {
-              contains: filtros.nombre,
-              mode: 'insensitive',
-            },
-          },
-        },
-      ];
+      where.nombre = { contains: filtros.nombre, mode: 'insensitive' };
     }
 
     if (filtros?.municipio) {
-      where.OR = [
-        {
-          perfilSolicitante: {
-            municipio: {
-              contains: filtros.municipio,
-              mode: 'insensitive',
-            },
-          },
-        },
-        {
-          perfilFuncionario: {
-            municipio: {
-              contains: filtros.municipio,
-              mode: 'insensitive',
-            },
-          },
-        },
-        {
-          perfilComision: {
-            municipio: {
-              contains: filtros.municipio,
-              mode: 'insensitive',
-            },
-          },
-        },
-        {
-          perfilDirector: {
-            municipio: {
-              contains: filtros.municipio,
-              mode: 'insensitive',
-            },
-          },
-        },
-      ];
+      where.municipio = { contains: filtros.municipio, mode: 'insensitive' };
     }
 
     const usuarios = await this.prisma.usuario.findMany({
@@ -325,6 +338,7 @@ export class UsuariosService {
         perfilSolicitante: true,
         perfilFuncionario: true,
         perfilComision: true,
+        perfilDirector: true,
       },
     });
 
@@ -340,6 +354,7 @@ export class UsuariosService {
       perfilSolicitante: usuario.perfilSolicitante,
       perfilFuncionario: usuario.perfilFuncionario,
       perfilComision: usuario.perfilComision,
+      perfilDirector: usuario.perfilDirector,
     };
   }
 

@@ -65,6 +65,9 @@ export class AuthService {
         perfilSolicitante: true,
         perfilFuncionario: true,
         perfilComision: true,
+        perfilDirector: {
+          include: { circulo: true },
+        },
       },
     });
 
@@ -101,18 +104,18 @@ export class AuthService {
   }
 
   async register(registerDto: RegisterDto): Promise<RegisterResponseDto> {
+    // Verificar email único
     const existingUser = await this.prisma.usuario.findUnique({
       where: { email: registerDto.email },
     });
-
     if (existingUser) {
       throw new ConflictException('El email ya está registrado');
     }
 
-    const existingCarnet = await this.prisma.perfilSolicitante.findUnique({
+    // Verificar carnet de identidad único (en Usuario)
+    const existingCarnet = await this.prisma.usuario.findUnique({
       where: { carnetIdentidad: registerDto.datosSolicitante.carnetIdentidad },
     });
-
     if (existingCarnet) {
       throw new ConflictException('El carnet de identidad ya está registrado');
     }
@@ -123,6 +126,7 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(registerDto.password, 10);
 
+    // Crear usuario con campos comunes y luego el perfil solicitante
     const usuario = await this.prisma.$transaction(async (prisma) => {
       const newUser = await prisma.usuario.create({
         data: {
@@ -130,13 +134,21 @@ export class AuthService {
           password: hashedPassword,
           rol: RolUsuario.SOLICITANTE,
           activo: true,
+          nombre: registerDto.datosSolicitante.nombre,
+          apellidos: registerDto.datosSolicitante.apellidos,
+          carnetIdentidad: registerDto.datosSolicitante.carnetIdentidad,
+          telefono: registerDto.datosSolicitante.telefono,
+          municipio: registerDto.datosSolicitante.municipio,
+          provincia: registerDto.datosSolicitante.provincia,
         },
       });
 
       await prisma.perfilSolicitante.create({
         data: {
           usuarioId: newUser.id,
-          ...registerDto.datosSolicitante,
+          tipoPersona: registerDto.datosSolicitante.tipoPersona,
+          cantHijos: registerDto.datosSolicitante.cantHijos ?? 1,
+          direccion: registerDto.datosSolicitante.direccion,
         },
       });
 
@@ -197,6 +209,30 @@ export class AuthService {
     return tokens;
   }
 
+  async getProfile(userId: string): Promise<ProfileResponseDto> {
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id: userId },
+      include: {
+        perfilSolicitante: true,
+        perfilFuncionario: true,
+        perfilComision: true,
+        perfilDirector: {
+          include: { circulo: true },
+        },
+        notificaciones: {
+          orderBy: { fecha: 'desc' },
+          take: 10,
+        },
+      },
+    });
+
+    if (!usuario) {
+      throw new UnauthorizedException('Usuario no encontrado');
+    }
+
+    return this.createUsuarioResponse(usuario);
+  }
+
   private async generateTokens(usuario: any): Promise<TokensDto> {
     let perfilId: string | undefined;
 
@@ -210,6 +246,9 @@ export class AuthService {
       case RolUsuario.COMISION_OTORGAMIENTO:
         perfilId = usuario.perfilComision?.id;
         break;
+      case RolUsuario.DIRECTOR_CIRCULO:
+        perfilId = usuario.perfilDirector?.id;
+        break;
       default:
         perfilId = undefined;
     }
@@ -222,11 +261,11 @@ export class AuthService {
     };
 
     const accessTokenExpiresIn = parseExpiresIn(
-      this.configService.get<string>('JWT_EXPIRES_IN', '3600'), // Default: 3600 segundos (1 hora)
+      this.configService.get<string>('JWT_EXPIRES_IN', '3600'),
     );
 
     const refreshTokenExpiresIn = parseExpiresIn(
-      this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '604800'), // Default: 604800 segundos (7 días)
+      this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '604800'),
     );
 
     const [accessToken, refreshToken] = await Promise.all([
@@ -261,27 +300,6 @@ export class AuthService {
     });
   }
 
-  async getProfile(userId: string): Promise<ProfileResponseDto> {
-    const usuario = await this.prisma.usuario.findUnique({
-      where: { id: userId },
-      include: {
-        perfilSolicitante: true,
-        perfilFuncionario: true,
-        perfilComision: true,
-        notificaciones: {
-          orderBy: { fecha: 'desc' },
-          take: 10,
-        },
-      },
-    });
-
-    if (!usuario) {
-      throw new UnauthorizedException('Usuario no encontrado');
-    }
-
-    return this.createUsuarioResponse(usuario);
-  }
-
   private createUsuarioResponse(usuario: any): ProfileResponseDto {
     const {
       password,
@@ -293,6 +311,16 @@ export class AuthService {
       ...userData
     } = usuario;
 
+    // Datos comunes que estarán presentes en todos los roles
+    const datosComunes = {
+      nombre: userData.nombre,
+      apellidos: userData.apellidos,
+      carnetIdentidad: userData.carnetIdentidad,
+      telefono: userData.telefono,
+      municipio: userData.municipio,
+      provincia: userData.provincia,
+    };
+
     const response: ProfileResponseDto = {
       id: userData.id,
       email: userData.email,
@@ -301,14 +329,49 @@ export class AuthService {
 
     switch (userData.rol) {
       case RolUsuario.SOLICITANTE:
-        response.perfilSolicitante = userData.perfilSolicitante;
+        if (userData.perfilSolicitante) {
+          const { usuarioId, ...perfilData } = userData.perfilSolicitante;
+          response.perfilSolicitante = {
+            ...datosComunes,
+            ...perfilData,
+          };
+        }
         break;
       case RolUsuario.FUNCIONARIO_MUNICIPAL:
-        response.perfilFuncionario = userData.perfilFuncionario;
+        if (userData.perfilFuncionario) {
+          const { usuarioId, ...perfilData } = userData.perfilFuncionario;
+          response.perfilFuncionario = {
+            ...datosComunes,
+            ...perfilData,
+          };
+        }
         break;
       case RolUsuario.COMISION_OTORGAMIENTO:
-        response.perfilComision = userData.perfilComision;
+        if (userData.perfilComision) {
+          const { usuarioId, ...perfilData } = userData.perfilComision;
+          response.perfilComision = {
+            ...datosComunes,
+            ...perfilData,
+          };
+        }
         break;
+      case RolUsuario.DIRECTOR_CIRCULO:
+        if (userData.perfilDirector) {
+          const { usuarioId, circuloId, ...perfilData } =
+            userData.perfilDirector;
+          response.perfilDirector = {
+            ...datosComunes,
+            ...perfilData,
+            circulo: userData.perfilDirector.circulo
+              ? {
+                  id: userData.perfilDirector.circulo.id,
+                  nombre: userData.perfilDirector.circulo.nombre,
+                }
+              : undefined,
+          };
+        }
+        break;
+      // ADMINISTRADOR no tiene perfil adicional
     }
 
     if (userData.notificaciones) {

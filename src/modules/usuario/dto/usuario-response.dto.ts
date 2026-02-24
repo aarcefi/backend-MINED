@@ -29,4 +29,10 @@ export class UsuarioResponseDto {
     description: 'Perfil de la comisión (solo si rol es COMISION_OTORGAMIENTO)',
   })
   perfilComision?: any;
+
+  @ApiPropertyOptional({
+    description:
+      'Perfil del director de círculo (solo si rol es DIRECTOR_CIRCULO)',
+  })
+  perfilDirector?: any;
 }

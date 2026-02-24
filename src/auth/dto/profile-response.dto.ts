@@ -56,6 +56,35 @@ export class ProfileResponseDto {
   perfilComision?: any;
 
   @ApiPropertyOptional({
+    description:
+      'Perfil del director de círculo (solo si rol es DIRECTOR_CIRCULO)',
+    example: {
+      nombre: 'Roberto',
+      apellidos: 'García Torres',
+      carnetIdentidad: '94010122334',
+      telefono: '+5352233445',
+      municipio: 'Plaza de la Revolución',
+      provincia: 'La Habana',
+      circulo: {
+        id: 'd4d4d4d4-d4d4-4d4d-d4d4-d4d4d4d4d4d4',
+        nombre: 'Círculo Infantil "Amiguitos"',
+      },
+    },
+  })
+  perfilDirector?: {
+    nombre: string;
+    apellidos: string;
+    carnetIdentidad: string;
+    telefono?: string;
+    municipio: string;
+    provincia: string;
+    circulo: {
+      id: string;
+      nombre: string;
+    };
+  };
+
+  @ApiPropertyOptional({
     description: 'Notificaciones del usuario (solo en getProfile)',
     example: [
       {

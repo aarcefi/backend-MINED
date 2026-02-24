@@ -19,6 +19,7 @@ import {
   ApiBearerAuth,
   ApiQuery,
   ApiBody,
+  ApiExtraModels,
 } from '@nestjs/swagger';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { RolUsuario } from '@prisma/client';
@@ -28,9 +29,19 @@ import { UsuariosService } from './usuarios.service';
 import { CreateUsuarioDto } from './dto/create-usuario.dto';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto';
 import { UsuarioResponseDto } from './dto/usuario-response.dto';
+import { CreatePerfilSolicitanteDto } from '../perfiles/perfil-solicitante/dto/create-perfil-solicitante.dto';
+import { CreatePerfilFuncionarioDto } from '../perfiles/perfil-funcionario/dto/create-perfil-funcionario.dto';
+import { CreatePerfilComisionDto } from '../perfiles/perfil-comision/dto/create-perfil-comision.dto';
+import { CreatePerfilDirectorDto } from '../perfiles/perfil-director/create-perfil-director.dto';
 
 @ApiTags('Usuarios')
 @ApiBearerAuth()
+@ApiExtraModels(
+  CreatePerfilSolicitanteDto,
+  CreatePerfilFuncionarioDto,
+  CreatePerfilComisionDto,
+  CreatePerfilDirectorDto,
+)
 @Controller('usuarios')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class UsuariosController {

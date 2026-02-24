@@ -8,7 +8,7 @@ CREATE TYPE "TipoSolicitud" AS ENUM ('TRABAJADOR', 'ESTUDIANTE', 'CASO_SOCIAL');
 CREATE TYPE "SectorPrioridad" AS ENUM ('SALUD', 'EDUCACION', 'DEFENSA', 'CASO_SOCIAL', 'OTRO');
 
 -- CreateEnum
-CREATE TYPE "EstadoSolicitud" AS ENUM ('RECIBIDA', 'EN_REVISION', 'APROBADA', 'RECHAZADA', 'EN_ESPERA');
+CREATE TYPE "EstadoSolicitud" AS ENUM ('EN_REVISION', 'APROBADA', 'RECHAZADA', 'EN_ESPERA');
 
 -- CreateEnum
 CREATE TYPE "TipoDocumento" AS ENUM ('CARNET', 'TARJETA_MENOR', 'CARTA_LABORAL', 'CARTA_ESTUDIO', 'INFORME_SOCIAL');
@@ -34,6 +34,12 @@ CREATE TABLE "usuarios" (
     "email" TEXT NOT NULL,
     "password" TEXT NOT NULL,
     "rol" "RolUsuario" NOT NULL,
+    "nombre" TEXT NOT NULL,
+    "apellidos" TEXT NOT NULL,
+    "carnetIdentidad" TEXT NOT NULL,
+    "telefono" TEXT,
+    "municipio" TEXT NOT NULL,
+    "provincia" TEXT NOT NULL,
     "activo" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP NOT NULL,
@@ -47,12 +53,7 @@ CREATE TABLE "usuarios" (
 CREATE TABLE "perfiles_solicitantes" (
     "id" UUID NOT NULL,
     "usuarioId" UUID NOT NULL,
-    "nombre" TEXT NOT NULL,
-    "apellidos" TEXT NOT NULL,
-    "carnetIdentidad" TEXT NOT NULL,
-    "telefono" TEXT,
     "direccion" TEXT NOT NULL,
-    "municipio" TEXT NOT NULL,
     "tipoPersona" "TipoPersona" NOT NULL,
     "cantHijos" INTEGER NOT NULL DEFAULT 1,
 
@@ -63,12 +64,7 @@ CREATE TABLE "perfiles_solicitantes" (
 CREATE TABLE "perfiles_funcionarios" (
     "id" UUID NOT NULL,
     "usuarioId" UUID NOT NULL,
-    "nombre" TEXT NOT NULL,
-    "apellidos" TEXT NOT NULL,
-    "carnetIdentidad" TEXT NOT NULL,
-    "telefono" TEXT,
     "cargo" TEXT NOT NULL,
-    "municipio" TEXT NOT NULL,
 
     CONSTRAINT "perfiles_funcionarios_pkey" PRIMARY KEY ("id")
 );
@@ -77,13 +73,18 @@ CREATE TABLE "perfiles_funcionarios" (
 CREATE TABLE "perfiles_comisiones" (
     "id" UUID NOT NULL,
     "usuarioId" UUID NOT NULL,
-    "nombre" TEXT NOT NULL,
-    "apellidos" TEXT NOT NULL,
-    "carnetIdentidad" TEXT NOT NULL,
-    "municipio" TEXT NOT NULL,
     "cargo" TEXT NOT NULL,
 
     CONSTRAINT "perfiles_comisiones_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "perfiles_directores" (
+    "id" UUID NOT NULL,
+    "usuarioId" UUID NOT NULL,
+    "circuloId" UUID NOT NULL,
+
+    CONSTRAINT "perfiles_directores_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -91,7 +92,7 @@ CREATE TABLE "ninos" (
     "id" UUID NOT NULL,
     "nombre" TEXT NOT NULL,
     "apellidos" TEXT NOT NULL,
-    "fechaNacimiento" TIMESTAMP NOT NULL,
+    "fechaNacimiento" DATE NOT NULL,
     "sexo" TEXT NOT NULL,
     "tarjetaMenor" TEXT NOT NULL,
     "solicitanteId" UUID NOT NULL,
@@ -120,9 +121,9 @@ CREATE TABLE "circulos_infantiles" (
 CREATE TABLE "periodos_otorgamiento" (
     "id" UUID NOT NULL,
     "nombre" TEXT NOT NULL,
-    "fechaInicio" TIMESTAMP NOT NULL,
-    "fechaCierre" TIMESTAMP NOT NULL,
-    "fechaAsignacion" TIMESTAMP NOT NULL,
+    "fechaInicio" DATE NOT NULL,
+    "fechaCierre" DATE NOT NULL,
+    "fechaAsignacion" DATE NOT NULL,
     "activo" BOOLEAN NOT NULL DEFAULT true,
 
     CONSTRAINT "periodos_otorgamiento_pkey" PRIMARY KEY ("id")
@@ -147,9 +148,8 @@ CREATE TABLE "solicitudes" (
     "fechaSolicitud" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "sector" "SectorPrioridad" NOT NULL,
     "tipoSolicitud" "TipoSolicitud" NOT NULL,
-    "estado" "EstadoSolicitud" NOT NULL DEFAULT 'RECIBIDA',
+    "estado" "EstadoSolicitud" NOT NULL DEFAULT 'EN_REVISION',
     "periodoId" UUID NOT NULL,
-    "numeroRegistro" TEXT NOT NULL,
     "observaciones" TEXT,
     "prioridad" INTEGER NOT NULL DEFAULT 0,
 
@@ -174,7 +174,7 @@ CREATE TABLE "documentos_solicitud" (
 CREATE TABLE "sesiones_comision" (
     "id" UUID NOT NULL,
     "periodoId" UUID NOT NULL,
-    "fecha" TIMESTAMP NOT NULL,
+    "fecha" DATE NOT NULL,
     "actaUrl" TEXT,
     "municipio" TEXT NOT NULL,
 
@@ -200,7 +200,7 @@ CREATE TABLE "matriculas" (
     "solicitudId" UUID NOT NULL,
     "circuloId" UUID NOT NULL,
     "fechaOtorgamiento" TIMESTAMP NOT NULL,
-    "fechaLimite" TIMESTAMP NOT NULL,
+    "fechaLimite" DATE NOT NULL,
     "estado" "EstadoMatricula" NOT NULL DEFAULT 'ACTIVA',
     "boletaUrl" TEXT,
     "folio" TEXT NOT NULL,
@@ -212,7 +212,7 @@ CREATE TABLE "matriculas" (
 CREATE TABLE "controles_trimestrales" (
     "id" UUID NOT NULL,
     "matriculaId" UUID NOT NULL,
-    "fecha" TIMESTAMP NOT NULL,
+    "fecha" DATE NOT NULL,
     "vinculo" "VinculoLaboral" NOT NULL,
     "observaciones" TEXT,
     "funcionarioId" UUID NOT NULL,
@@ -224,7 +224,7 @@ CREATE TABLE "controles_trimestrales" (
 CREATE TABLE "trazabilidades" (
     "id" UUID NOT NULL,
     "solicitudId" UUID NOT NULL,
-    "estadoAnterior" "EstadoSolicitud" NOT NULL,
+    "estadoAnterior" "EstadoSolicitud",
     "estadoNuevo" "EstadoSolicitud" NOT NULL,
     "fecha" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "usuarioId" UUID NOT NULL,
@@ -250,22 +250,22 @@ CREATE TABLE "notificaciones" (
 CREATE UNIQUE INDEX "usuarios_email_key" ON "usuarios"("email");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "perfiles_solicitantes_usuarioId_key" ON "perfiles_solicitantes"("usuarioId");
+CREATE UNIQUE INDEX "usuarios_carnetIdentidad_key" ON "usuarios"("carnetIdentidad");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "perfiles_solicitantes_carnetIdentidad_key" ON "perfiles_solicitantes"("carnetIdentidad");
+CREATE UNIQUE INDEX "perfiles_solicitantes_usuarioId_key" ON "perfiles_solicitantes"("usuarioId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "perfiles_funcionarios_usuarioId_key" ON "perfiles_funcionarios"("usuarioId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "perfiles_funcionarios_carnetIdentidad_key" ON "perfiles_funcionarios"("carnetIdentidad");
-
--- CreateIndex
 CREATE UNIQUE INDEX "perfiles_comisiones_usuarioId_key" ON "perfiles_comisiones"("usuarioId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "perfiles_comisiones_carnetIdentidad_key" ON "perfiles_comisiones"("carnetIdentidad");
+CREATE UNIQUE INDEX "perfiles_directores_usuarioId_key" ON "perfiles_directores"("usuarioId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "perfiles_directores_circuloId_key" ON "perfiles_directores"("circuloId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "ninos_tarjetaMenor_key" ON "ninos"("tarjetaMenor");
@@ -275,9 +275,6 @@ CREATE UNIQUE INDEX "capacidades_circulos_circuloId_periodoId_key" ON "capacidad
 
 -- CreateIndex
 CREATE UNIQUE INDEX "solicitudes_ninoId_key" ON "solicitudes"("ninoId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "solicitudes_numeroRegistro_key" ON "solicitudes"("numeroRegistro");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "matriculas_solicitudId_key" ON "matriculas"("solicitudId");
@@ -293,6 +290,12 @@ ALTER TABLE "perfiles_funcionarios" ADD CONSTRAINT "perfiles_funcionarios_usuari
 
 -- AddForeignKey
 ALTER TABLE "perfiles_comisiones" ADD CONSTRAINT "perfiles_comisiones_usuarioId_fkey" FOREIGN KEY ("usuarioId") REFERENCES "usuarios"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "perfiles_directores" ADD CONSTRAINT "perfiles_directores_usuarioId_fkey" FOREIGN KEY ("usuarioId") REFERENCES "usuarios"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "perfiles_directores" ADD CONSTRAINT "perfiles_directores_circuloId_fkey" FOREIGN KEY ("circuloId") REFERENCES "circulos_infantiles"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "ninos" ADD CONSTRAINT "ninos_solicitanteId_fkey" FOREIGN KEY ("solicitanteId") REFERENCES "perfiles_solicitantes"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -346,7 +349,7 @@ ALTER TABLE "controles_trimestrales" ADD CONSTRAINT "controles_trimestrales_func
 ALTER TABLE "trazabilidades" ADD CONSTRAINT "trazabilidades_solicitudId_fkey" FOREIGN KEY ("solicitudId") REFERENCES "solicitudes"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "trazabilidades" ADD CONSTRAINT "trazabilidades_usuarioId_fkey" FOREIGN KEY ("usuarioId") REFERENCES "perfiles_funcionarios"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "trazabilidades" ADD CONSTRAINT "trazabilidades_usuarioId_fkey" FOREIGN KEY ("usuarioId") REFERENCES "usuarios"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "notificaciones" ADD CONSTRAINT "notificaciones_usuarioId_fkey" FOREIGN KEY ("usuarioId") REFERENCES "usuarios"("id") ON DELETE CASCADE ON UPDATE CASCADE;

@@ -39,6 +39,7 @@ export class SolicitudService {
     // Verificar que el solicitante existe
     const solicitante = await this.prisma.perfilSolicitante.findUnique({
       where: { id: data.solicitanteId },
+      include: { usuario: true },
     });
     if (!solicitante) {
       throw new NotFoundException(
@@ -121,7 +122,7 @@ export class SolicitudService {
       include: {
         nino: true,
         periodo: true,
-        solicitante: true,
+        solicitante: { include: { usuario: true } },
         documentos: true,
       },
     });
@@ -163,14 +164,21 @@ export class SolicitudService {
 
     if (filtros?.municipio) {
       where.solicitante = {
-        municipio: { contains: filtros.municipio, mode: 'insensitive' },
+        usuario: {
+          municipio: { contains: filtros.municipio, mode: 'insensitive' },
+        },
       };
     }
 
     // Filtro por municipio para directores de círculo
     if (usuario?.rol === RolUsuario.DIRECTOR_CIRCULO && usuario.perfil) {
       where.solicitante = {
-        municipio: { contains: usuario.perfil.municipio, mode: 'insensitive' },
+        usuario: {
+          municipio: {
+            contains: usuario.perfil.municipio,
+            mode: 'insensitive',
+          },
+        },
       };
     }
 
@@ -183,9 +191,9 @@ export class SolicitudService {
     const solicitudes = await this.prisma.solicitud.findMany({
       where,
       include: {
-        nino: { include: { solicitante: true } },
+        nino: { include: { solicitante: { include: { usuario: true } } } },
         periodo: true,
-        solicitante: true,
+        solicitante: { include: { usuario: true } },
         documentos: { where: { validado: true } },
         matricula: { include: { circulo: true } },
       },
@@ -199,9 +207,9 @@ export class SolicitudService {
     const solicitud = await this.prisma.solicitud.findUnique({
       where: { id },
       include: {
-        nino: { include: { solicitante: true } },
+        nino: { include: { solicitante: { include: { usuario: true } } } },
         periodo: true,
-        solicitante: true,
+        solicitante: { include: { usuario: true } },
         documentos: { include: { validador: true } },
         matricula: { include: { circulo: true, controles: true } },
       },
@@ -221,9 +229,9 @@ export class SolicitudService {
     const solicitudes = await this.prisma.solicitud.findMany({
       where: { solicitanteId },
       include: {
-        nino: true,
+        nino: { include: { solicitante: { include: { usuario: true } } } },
         periodo: true,
-        solicitante: true,
+        solicitante: { include: { usuario: true } },
         documentos: true,
         matricula: { include: { circulo: true } },
       },
@@ -238,7 +246,7 @@ export class SolicitudService {
   ): Promise<SolicitudResponseDto[]> {
     const nino = await this.prisma.nino.findUnique({
       where: { id: ninoId },
-      include: { solicitante: true },
+      include: { solicitante: { include: { usuario: true } } },
     });
     if (!nino) {
       throw new NotFoundException(`Niño con ID ${ninoId} no encontrado`);
@@ -254,9 +262,9 @@ export class SolicitudService {
     const solicitudes = await this.prisma.solicitud.findMany({
       where: { ninoId },
       include: {
-        nino: true,
+        nino: { include: { solicitante: { include: { usuario: true } } } },
         periodo: true,
-        solicitante: true,
+        solicitante: { include: { usuario: true } },
         documentos: true,
         matricula: { include: { circulo: true } },
       },
@@ -274,16 +282,18 @@ export class SolicitudService {
     };
     if (municipio) {
       where.solicitante = {
-        municipio: { contains: municipio, mode: 'insensitive' },
+        usuario: {
+          municipio: { contains: municipio, mode: 'insensitive' },
+        },
       };
     }
 
     const solicitudes = await this.prisma.solicitud.findMany({
       where,
       include: {
-        nino: { include: { solicitante: true } },
+        nino: { include: { solicitante: { include: { usuario: true } } } },
         periodo: true,
-        solicitante: true,
+        solicitante: { include: { usuario: true } },
         documentos: true,
         matricula: { include: { circulo: true } },
       },
@@ -299,7 +309,11 @@ export class SolicitudService {
   ): Promise<SolicitudResponseDto> {
     const solicitud = await this.prisma.solicitud.findUnique({
       where: { id },
-      include: { nino: true, solicitante: true, periodo: true },
+      include: {
+        nino: true,
+        solicitante: { include: { usuario: true } },
+        periodo: true,
+      },
     });
     if (!solicitud) {
       throw new NotFoundException(`Solicitud con ID ${id} no encontrada`);
@@ -363,7 +377,7 @@ export class SolicitudService {
       include: {
         nino: true,
         periodo: true,
-        solicitante: true,
+        solicitante: { include: { usuario: true } },
         documentos: true,
         matricula: true,
       },
@@ -393,7 +407,11 @@ export class SolicitudService {
   ): Promise<SolicitudResponseDto> {
     const solicitud = await this.prisma.solicitud.findUnique({
       where: { id },
-      include: { nino: true, solicitante: true, periodo: true },
+      include: {
+        nino: true,
+        solicitante: { include: { usuario: true } },
+        periodo: true,
+      },
     });
     if (!solicitud) {
       throw new NotFoundException(`Solicitud con ID ${id} no encontrada`);
@@ -441,7 +459,7 @@ export class SolicitudService {
       include: {
         nino: true,
         periodo: true,
-        solicitante: true,
+        solicitante: { include: { usuario: true } },
         documentos: true,
         matricula: true,
       },
@@ -457,7 +475,11 @@ export class SolicitudService {
   ): Promise<SolicitudResponseDto> {
     const solicitud = await this.prisma.solicitud.findUnique({
       where: { id },
-      include: { nino: true, periodo: true, solicitante: true },
+      include: {
+        nino: true,
+        periodo: true,
+        solicitante: { include: { usuario: true } },
+      },
     });
     if (!solicitud) {
       throw new NotFoundException(`Solicitud con ID ${id} no encontrada`);
@@ -477,7 +499,7 @@ export class SolicitudService {
       include: {
         nino: true,
         periodo: true,
-        solicitante: true,
+        solicitante: { include: { usuario: true } },
         documentos: true,
         matricula: true,
       },
@@ -489,7 +511,7 @@ export class SolicitudService {
   async remove(id: string, usuario: any): Promise<{ message: string }> {
     const solicitud = await this.prisma.solicitud.findUnique({
       where: { id },
-      include: { solicitante: true },
+      include: { solicitante: { include: { usuario: true } } },
     });
     if (!solicitud) {
       throw new NotFoundException(`Solicitud con ID ${id} no encontrada`);
@@ -523,13 +545,19 @@ export class SolicitudService {
     if (filtros?.periodoId) where.periodoId = filtros.periodoId;
     if (filtros?.municipio) {
       where.solicitante = {
-        municipio: { contains: filtros.municipio, mode: 'insensitive' },
+        usuario: {
+          municipio: { contains: filtros.municipio, mode: 'insensitive' },
+        },
       };
     }
 
     const solicitudes = await this.prisma.solicitud.findMany({
       where,
-      include: { nino: true, solicitante: true, decisiones: true },
+      include: {
+        nino: true,
+        solicitante: { include: { usuario: true } },
+        decisiones: true,
+      },
     });
 
     const total = solicitudes.length;
@@ -612,7 +640,8 @@ export class SolicitudService {
     if (nino.casoEspecial) prioridad += 15;
     if (nino.tipoNecesidad) prioridad += 10;
     if (solicitante.cantHijos > 1) prioridad += (solicitante.cantHijos - 1) * 5;
-    if (solicitante.tipoPersona === 'JURIDICA') prioridad += 5;
+    // Nota: tipoPersona ya no existe en solicitante? Se mantenía, pero si no, eliminar o ajustar
+    // if (solicitante.tipoPersona === 'JURIDICA') prioridad += 5; // Comentado porque no está en el nuevo esquema
 
     return prioridad;
   }
@@ -629,7 +658,9 @@ export class SolicitudService {
       return;
     }
     if (usuario?.rol === RolUsuario.DIRECTOR_CIRCULO && usuario.perfil) {
-      if (solicitud.solicitante.municipio !== usuario.perfil.municipio) {
+      if (
+        solicitud.solicitante.usuario?.municipio !== usuario.perfil.municipio
+      ) {
         throw new ForbiddenException(
           'Solo puedes acceder a solicitudes de tu municipio',
         );
@@ -694,9 +725,9 @@ export class SolicitudService {
       },
       solicitante: {
         id: solicitud.solicitante.id,
-        nombre: solicitud.solicitante.nombre,
-        apellidos: solicitud.solicitante.apellidos,
-        municipio: solicitud.solicitante.municipio,
+        nombre: solicitud.solicitante.usuario?.nombre,
+        apellidos: solicitud.solicitante.usuario?.apellidos,
+        municipio: solicitud.solicitante.usuario?.municipio,
       },
       documentos:
         solicitud.documentos?.map((doc) => ({

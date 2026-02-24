@@ -62,6 +62,37 @@ export class PerfilesController {
     return this.perfilesService.findComisionByMunicipio(municipio);
   }
 
+  // PERFILES DIRECTOR
+  @Get('director/usuario/:usuarioId')
+  @Roles(
+    RolUsuario.ADMINISTRADOR,
+    RolUsuario.FUNCIONARIO_MUNICIPAL,
+    RolUsuario.DIRECTOR_CIRCULO,
+  )
+  @ApiOperation({ summary: 'Obtener perfil de director por usuario ID' })
+  getPerfilDirector(@Param('usuarioId') usuarioId: string) {
+    return this.perfilesService.findPerfilDirectorByUsuarioId(usuarioId);
+  }
+
+  @Get('director/circulo/:circuloId')
+  @Roles(
+    RolUsuario.ADMINISTRADOR,
+    RolUsuario.FUNCIONARIO_MUNICIPAL,
+    RolUsuario.DIRECTOR_CIRCULO,
+  )
+  @ApiOperation({ summary: 'Obtener perfil de director por círculo ID' })
+  getPerfilDirectorByCirculo(@Param('circuloId') circuloId: string) {
+    return this.perfilesService.findPerfilDirectorByCirculoId(circuloId);
+  }
+
+  @Get('director/municipio')
+  @Roles(RolUsuario.ADMINISTRADOR, RolUsuario.FUNCIONARIO_MUNICIPAL)
+  @ApiOperation({ summary: 'Buscar directores por municipio' })
+  @ApiQuery({ name: 'municipio', required: true })
+  getDirectoresByMunicipio(@Query('municipio') municipio: string) {
+    return this.perfilesService.findDirectoresByMunicipio(municipio);
+  }
+
   // GENERAL
   @Get('usuario/:usuarioId')
   @Roles(
