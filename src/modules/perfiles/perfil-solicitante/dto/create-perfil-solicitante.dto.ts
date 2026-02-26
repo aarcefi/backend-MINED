@@ -16,4 +16,8 @@ export class CreatePerfilSolicitanteDto {
   @ApiProperty({ example: 'Calle 10 #123 e/ 1ra y 3ra, Vedado' })
   @IsString()
   direccion: string;
+
+  @ApiProperty({ example: 'Hospital Salvador Allende' })
+  @IsString()
+  centroTrabajo: string;
 }

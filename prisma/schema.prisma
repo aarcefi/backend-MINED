@@ -34,6 +34,7 @@ enum SectorPrioridad {
 
 enum EstadoSolicitud {
   EN_REVISION
+  REVISADA
   APROBADA
   RECHAZADA
   EN_ESPERA
@@ -94,12 +95,13 @@ model Usuario {
   telefono        String?
   municipio       String
   provincia       String
-
   activo          Boolean   @default(true)
   createdAt       DateTime  @default(now()) @db.Timestamp
   updatedAt       DateTime  @updatedAt @db.Timestamp
   refreshToken    String?
   tokenExpiry     DateTime? @db.Timestamp
+  resetPasswordCode   String?   
+  resetPasswordExpiry DateTime? @db.Timestamp
 
   // Relaciones según el rol
   perfilSolicitante   PerfilSolicitante?
@@ -120,6 +122,7 @@ model PerfilSolicitante {
   id              String              @id @default(uuid()) @db.Uuid
   usuarioId       String              @unique @db.Uuid
   direccion       String
+  centroTrabajo   String
   tipoPersona     TipoPersona
   cantHijos       Int                 @default(1)
 

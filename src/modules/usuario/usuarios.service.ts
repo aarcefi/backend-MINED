@@ -58,6 +58,7 @@ export class UsuariosService {
               tipoPersona: solicitanteData.tipoPersona,
               cantHijos: solicitanteData.cantHijos ?? 1,
               direccion: solicitanteData.direccion,
+              centroTrabajo: solicitanteData.centroTrabajo,
             },
           });
           break;

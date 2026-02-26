@@ -26,6 +26,8 @@ import { Public } from './decorators/public.decorator';
 import { LoginResponseDto } from './dto/login-response.dto';
 import { ProfileResponseDto } from './dto/profile-response.dto';
 import { RegisterResponseDto } from './dto/register-response.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @ApiTags('Autenticación')
 @Controller('auth')
@@ -115,5 +117,30 @@ export class AuthController {
   })
   async getProfile(@Request() req): Promise<ProfileResponseDto> {
     return this.authService.getProfile(req.user.id);
+  }
+
+  @Public()
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Solicitar restablecimiento de contraseña' })
+  @ApiResponse({
+    status: 200,
+    description: 'Correo enviado si el email existe',
+  })
+  async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(forgotPasswordDto.email);
+  }
+
+  @Public()
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Restablecer contraseña con token' })
+  @ApiResponse({ status: 200, description: 'Contraseña actualizada' })
+  @ApiResponse({ status: 401, description: 'Token inválido o expirado' })
+  async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
+    return this.authService.resetPassword(
+      resetPasswordDto.code,
+      resetPasswordDto.newPassword,
+    );
   }
 }

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unused-vars */
@@ -20,6 +21,8 @@ import { UsuarioSinPassword } from './types';
 import { LoginResponseDto } from './dto/login-response.dto';
 import { ProfileResponseDto } from './dto/profile-response.dto';
 import { RegisterResponseDto } from './dto/register-response.dto';
+import { MailService } from 'src/mail/mail.service';
+import { randomInt } from 'crypto';
 
 function parseExpiresIn(expiresIn: string): number {
   if (!isNaN(Number(expiresIn))) {
@@ -53,6 +56,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private mailService: MailService,
   ) {}
 
   async validateUser(
@@ -149,6 +153,7 @@ export class AuthService {
           tipoPersona: registerDto.datosSolicitante.tipoPersona,
           cantHijos: registerDto.datosSolicitante.cantHijos ?? 1,
           direccion: registerDto.datosSolicitante.direccion,
+          centroTrabajo: registerDto.datosSolicitante.centroTrabajo,
         },
       });
 
@@ -231,6 +236,72 @@ export class AuthService {
     }
 
     return this.createUsuarioResponse(usuario);
+  }
+
+  async forgotPassword(email: string): Promise<{ message: string }> {
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { email },
+    });
+
+    if (!usuario) {
+      // Por seguridad, no revelamos si el email existe
+      return {
+        message:
+          'Si el email existe, recibirás un correo para restablecer tu contraseña',
+      };
+    }
+
+    // Generar código de 6 dígitos
+    const code = randomInt(100000, 999999).toString();
+
+    // Guardar código y expiración (15 minutos)
+    const expiry = new Date(Date.now() + 15 * 60 * 1000);
+    await this.prisma.usuario.update({
+      where: { id: usuario.id },
+      data: {
+        resetPasswordCode: code,
+        resetPasswordExpiry: expiry,
+      },
+    });
+
+    // Enviar correo
+    await this.mailService.sendPasswordResetEmail(email, code);
+
+    return {
+      message:
+        'Si el email existe, recibirás un correo para restablecer tu contraseña',
+    };
+  }
+
+  // Método para reset-password
+  async resetPassword(
+    token: string,
+    newPassword: string,
+  ): Promise<{ message: string }> {
+    const usuario = await this.prisma.usuario.findFirst({
+      where: {
+        resetPasswordCode: token,
+        resetPasswordExpiry: { gt: new Date() },
+      },
+    });
+
+    if (!usuario) {
+      throw new UnauthorizedException('Token inválido o expirado');
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await this.prisma.usuario.update({
+      where: { id: usuario.id },
+      data: {
+        password: hashedPassword,
+        resetPasswordCode: null,
+        resetPasswordExpiry: null,
+        refreshToken: null,
+      },
+    });
+
+    return { message: 'Contraseña actualizada exitosamente' };
   }
 
   private async generateTokens(usuario: any): Promise<TokensDto> {

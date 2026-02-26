@@ -21,6 +21,7 @@ export class ProfileResponseDto {
       direccion: 'Calle 10 #123 e/ 1ra y 3ra, Vedado',
       municipio: 'Plaza de la Revolución',
       provincia: 'La Habana',
+      centroTrabajo: 'Hospital Salvador Allende',
       tipoPersona: 'MADRE',
       cantHijos: 2,
     },

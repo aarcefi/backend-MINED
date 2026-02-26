@@ -49,6 +49,10 @@ export class DatosSolicitanteDto {
   @IsOptional()
   @IsNumber()
   cantHijos?: number = 1;
+
+  @ApiProperty({ example: 'Hospital Salvador Allende' })
+  @IsString()
+  centroTrabajo: string;
 }
 
 export class RegisterDto {
