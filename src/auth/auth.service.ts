@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unused-vars */
@@ -23,6 +22,8 @@ import { ProfileResponseDto } from './dto/profile-response.dto';
 import { RegisterResponseDto } from './dto/register-response.dto';
 import { MailService } from 'src/mail/mail.service';
 import { randomInt } from 'crypto';
+import { PerfilesService } from 'src/modules/perfiles/perfiles.service';
+import { UsuariosService } from 'src/modules/usuario/usuarios.service';
 
 function parseExpiresIn(expiresIn: string): number {
   if (!isNaN(Number(expiresIn))) {
@@ -57,6 +58,8 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private mailService: MailService,
+    private usuariosService: UsuariosService,
+    private perfilesService: PerfilesService,
   ) {}
 
   async validateUser(
@@ -91,35 +94,31 @@ export class AuthService {
 
   async login(loginDto: LoginDto): Promise<LoginResponseDto> {
     const usuario = await this.validateUser(loginDto.email, loginDto.password);
-
     if (!usuario) {
       throw new UnauthorizedException('Credenciales incorrectas');
     }
 
     const tokens = await this.generateTokens(usuario);
-    await this.updateRefreshToken(usuario.id, tokens.refreshToken);
+    await this.usuariosService.updateRefreshToken(
+      usuario.id,
+      tokens.refreshToken,
+    );
 
     const userResponse = this.createUsuarioResponse(usuario);
-
-    return {
-      tokens,
-      user: userResponse,
-    };
+    return { tokens, user: userResponse };
   }
 
   async register(registerDto: RegisterDto): Promise<RegisterResponseDto> {
-    // Verificar email único
-    const existingUser = await this.prisma.usuario.findUnique({
-      where: { email: registerDto.email },
-    });
+    const existingUser = await this.usuariosService.findByEmail(
+      registerDto.email,
+    );
     if (existingUser) {
       throw new ConflictException('El email ya está registrado');
     }
 
-    // Verificar carnet de identidad único (en Usuario)
-    const existingCarnet = await this.prisma.usuario.findUnique({
-      where: { carnetIdentidad: registerDto.datosSolicitante.carnetIdentidad },
-    });
+    const existingCarnet = await this.usuariosService.findByCarnet(
+      registerDto.datosSolicitante.carnetIdentidad,
+    );
     if (existingCarnet) {
       throw new ConflictException('El carnet de identidad ya está registrado');
     }
@@ -130,7 +129,6 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(registerDto.password, 10);
 
-    // Crear usuario con campos comunes y luego el perfil solicitante
     const usuario = await this.prisma.$transaction(async (prisma) => {
       const newUser = await prisma.usuario.create({
         data: {
@@ -159,15 +157,10 @@ export class AuthService {
 
       const usuarioCompleto = await prisma.usuario.findUnique({
         where: { id: newUser.id },
-        include: {
-          perfilSolicitante: true,
-        },
+        include: { perfilSolicitante: true },
       });
 
-      if (!usuarioCompleto) {
-        throw new Error('Error al crear usuario');
-      }
-
+      if (!usuarioCompleto) throw new Error('Error al crear usuario');
       const { password, ...usuarioSinPassword } = usuarioCompleto;
       return usuarioSinPassword;
     });
@@ -176,15 +169,7 @@ export class AuthService {
   }
 
   async logout(userId: string): Promise<{ message: string }> {
-    await this.prisma.usuario.update({
-      where: { id: userId },
-      data: {
-        refreshToken: null,
-        tokenExpiry: null,
-      },
-    });
-
-    return { message: 'Sesión cerrada exitosamente' };
+    return this.usuariosService.clearRefreshToken(userId);
   }
 
   async refreshTokens(
@@ -203,59 +188,45 @@ export class AuthService {
       refreshToken,
       usuario.refreshToken,
     );
-
     if (!refreshTokenMatches) {
       throw new UnauthorizedException('Acceso denegado');
     }
 
     const tokens = await this.generateTokens(usuario);
-    await this.updateRefreshToken(usuario.id, tokens.refreshToken);
+    await this.usuariosService.updateRefreshToken(
+      usuario.id,
+      tokens.refreshToken,
+    );
 
     return tokens;
   }
 
   async getProfile(userId: string): Promise<ProfileResponseDto> {
-    const usuario = await this.prisma.usuario.findUnique({
-      where: { id: userId },
-      include: {
-        perfilSolicitante: true,
-        perfilFuncionario: true,
-        perfilComision: true,
-        perfilDirector: {
-          include: { circulo: true },
-        },
-        notificaciones: {
-          orderBy: { fecha: 'desc' },
-          take: 10,
-        },
-      },
-    });
-
-    if (!usuario) {
-      throw new UnauthorizedException('Usuario no encontrado');
+    const perfil = await this.perfilesService.findPerfilByUsuarioId(userId);
+    if (perfil) {
+      const { usuario, notificaciones, ...perfilData } = perfil;
+      const usuarioCompleto = {
+        ...usuario,
+        [`perfil${usuario.rol}`]: perfilData, // Asignar perfil según rol
+        notificaciones,
+      };
+      return this.createUsuarioResponse(usuarioCompleto);
+    } else {
+      const usuario = await this.usuariosService.getProfile(userId);
+      return this.createUsuarioResponse(usuario);
     }
-
-    return this.createUsuarioResponse(usuario);
   }
 
   async forgotPassword(email: string): Promise<{ message: string }> {
-    const usuario = await this.prisma.usuario.findUnique({
-      where: { email },
-    });
-
+    const usuario = await this.usuariosService.findByEmail(email);
     if (!usuario) {
-      // Por seguridad, no revelamos si el email existe
-      return {
-        message:
-          'Si el email existe, recibirás un correo para restablecer tu contraseña',
-      };
+      return { message: 'Si el email existe, recibirás un correo...' };
     }
 
-    // Generar código de 6 dígitos
     const code = randomInt(100000, 999999).toString();
-
-    // Guardar código y expiración (15 minutos)
     const expiry = new Date(Date.now() + 15 * 60 * 1000);
+
+    // Actualizar directamente con prisma (no hay método en usuariosService para esto)
     await this.prisma.usuario.update({
       where: { id: usuario.id },
       data: {
@@ -264,16 +235,10 @@ export class AuthService {
       },
     });
 
-    // Enviar correo
     await this.mailService.sendPasswordResetEmail(email, code);
-
-    return {
-      message:
-        'Si el email existe, recibirás un correo para restablecer tu contraseña',
-    };
+    return { message: 'Si el email existe, recibirás un correo...' };
   }
 
-  // Método para reset-password
   async resetPassword(
     token: string,
     newPassword: string,

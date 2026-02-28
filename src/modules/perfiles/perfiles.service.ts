@@ -1,5 +1,7 @@
 import {
   ConflictException,
+  forwardRef,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -9,11 +11,17 @@ import { CreatePerfilFuncionarioDto } from './perfil-funcionario/dto/create-perf
 import { CreatePerfilComisionDto } from './perfil-comision/dto/create-perfil-comision.dto';
 import { CreatePerfilDirectorDto } from './perfil-director/create-perfil-director.dto';
 import { RolUsuario } from '@prisma/client';
+import { CirculoInfantilService } from '../circulo-infantil/circulo-infantil.service';
+import { UsuariosService } from '../usuario/usuarios.service';
 
 @Injectable()
 export class PerfilesService {
-  constructor(private prisma: PrismaService) {}
-
+  constructor(
+    private prisma: PrismaService,
+    private circuloService: CirculoInfantilService,
+    @Inject(forwardRef(() => UsuariosService))
+    private usuariosService: UsuariosService,
+  ) {}
   // PERFIL SOLICITANTE
   async createPerfilSolicitante(
     usuarioId: string,
@@ -251,9 +259,7 @@ export class PerfilesService {
     }
 
     // Verificar que el círculo existe
-    const circulo = await this.prisma.circuloInfantil.findUnique({
-      where: { id: createDto.circuloId },
-    });
+    const circulo = await this.circuloService.findOne(createDto.circuloId);
     if (!circulo) {
       throw new NotFoundException('Círculo infantil no encontrado');
     }
@@ -352,94 +358,56 @@ export class PerfilesService {
     }));
   }
 
-  // Modificar findPerfilByUsuarioId para incluir perfilDirector
   async findPerfilByUsuarioId(usuarioId: string) {
-    const usuario = await this.prisma.usuario.findUnique({
-      where: { id: usuarioId },
-      include: {
-        perfilSolicitante: true,
-        perfilFuncionario: true,
-        perfilComision: true,
-        perfilDirector: {
-          // <-- AÑADIDO
-          include: { circulo: true },
-        },
-        notificaciones: {
-          orderBy: { fecha: 'desc' },
-        },
-      },
-    });
-
+    const usuario = await this.usuariosService.getProfile(usuarioId);
     if (!usuario) {
       throw new NotFoundException('Usuario no encontrado');
     }
 
-    // Retornar el perfil correspondiente junto con los datos del usuario
+    const baseUser = {
+      id: usuario.id,
+      email: usuario.email,
+      rol: usuario.rol,
+      nombre: usuario.nombre,
+      apellidos: usuario.apellidos,
+      carnetIdentidad: usuario.carnetIdentidad,
+      telefono: usuario.telefono,
+      municipio: usuario.municipio,
+      provincia: usuario.provincia,
+    };
+
     if (usuario.perfilSolicitante) {
       return {
         ...usuario.perfilSolicitante,
-        usuario: {
-          id: usuario.id,
-          email: usuario.email,
-          nombre: usuario.nombre,
-          apellidos: usuario.apellidos,
-          carnetIdentidad: usuario.carnetIdentidad,
-          telefono: usuario.telefono,
-          municipio: usuario.municipio,
-          provincia: usuario.provincia,
-        },
+        usuario: baseUser,
+        notificaciones: usuario.notificaciones,
       };
     }
 
     if (usuario.perfilFuncionario) {
       return {
         ...usuario.perfilFuncionario,
-        usuario: {
-          id: usuario.id,
-          email: usuario.email,
-          nombre: usuario.nombre,
-          apellidos: usuario.apellidos,
-          carnetIdentidad: usuario.carnetIdentidad,
-          telefono: usuario.telefono,
-          municipio: usuario.municipio,
-          provincia: usuario.provincia,
-        },
+        usuario: baseUser,
+        notificaciones: usuario.notificaciones,
       };
     }
 
     if (usuario.perfilComision) {
       return {
         ...usuario.perfilComision,
-        usuario: {
-          id: usuario.id,
-          email: usuario.email,
-          nombre: usuario.nombre,
-          apellidos: usuario.apellidos,
-          carnetIdentidad: usuario.carnetIdentidad,
-          telefono: usuario.telefono,
-          municipio: usuario.municipio,
-          provincia: usuario.provincia,
-        },
+        usuario: baseUser,
+        notificaciones: usuario.notificaciones,
       };
     }
 
     if (usuario.perfilDirector) {
-      // <-- AÑADIDO
       return {
-        ...usuario.perfilDirector,
-        usuario: {
-          id: usuario.id,
-          email: usuario.email,
-          nombre: usuario.nombre,
-          apellidos: usuario.apellidos,
-          carnetIdentidad: usuario.carnetIdentidad,
-          telefono: usuario.telefono,
-          municipio: usuario.municipio,
-          provincia: usuario.provincia,
-        },
+        ...usuario.perfilDirector, // incluye circulo gracias a getProfile
+        usuario: baseUser,
+        notificaciones: usuario.notificaciones,
       };
     }
 
-    throw new NotFoundException('El usuario no tiene un perfil asociado');
+    return null;
   }
 }

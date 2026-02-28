@@ -9,6 +9,8 @@ import {
   ConflictException,
   ForbiddenException,
   BadRequestException,
+  forwardRef,
+  Inject,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { NinosService } from '../nino/nino.service';
@@ -23,13 +25,16 @@ import {
   RolUsuario,
 } from '@prisma/client';
 import { SolicitudResponseDto } from './dto/solicitud-response.dto';
+import { PeriodoService } from '../periodo/periodo.service';
 
 @Injectable()
 export class SolicitudService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ninosService: NinosService,
-    private readonly trazabilidadService: TrazabilidadService,
+    private readonly periodoService: PeriodoService,
+    @Inject(forwardRef(() => TrazabilidadService))
+    private trazabilidadService: TrazabilidadService,
   ) {}
 
   async create(
@@ -47,18 +52,15 @@ export class SolicitudService {
       );
     }
 
-    // Determinar período activo
-    const fechaActual = new Date();
-    const periodoId = await this.obtenerPeriodoActivo(fechaActual);
-    const periodo = await this.prisma.periodoOtorgamiento.findUnique({
-      where: { id: periodoId },
-    });
-    if (!periodo || !periodo.activo) {
-      throw new ConflictException('El período activo no está disponible');
+    // Obtener período activo usando PeriodoService
+    const periodoActivo = await this.periodoService.findActivo();
+    if (!periodoActivo) {
+      throw new NotFoundException('No hay un período de otorgamiento activo');
     }
+    const fechaActual = new Date();
     if (
-      fechaActual < periodo.fechaInicio ||
-      fechaActual > periodo.fechaCierre
+      fechaActual < periodoActivo.fechaInicio ||
+      fechaActual > periodoActivo.fechaCierre
     ) {
       throw new ConflictException(
         'La fecha actual está fuera del período activo',
@@ -93,7 +95,7 @@ export class SolicitudService {
     const solicitudExistente = await this.prisma.solicitud.findFirst({
       where: {
         ninoId: nino.id,
-        periodoId: periodoId,
+        periodoId: periodoActivo.id,
         estado: { in: ['EN_REVISION', 'EN_ESPERA'] },
       },
     });
@@ -115,7 +117,7 @@ export class SolicitudService {
         sector: data.sector,
         tipoSolicitud: data.tipoSolicitud,
         estado: data.estado,
-        periodoId: periodoId,
+        periodoId: periodoActivo.id,
         observaciones: data.observaciones,
         prioridad,
       },
@@ -244,13 +246,7 @@ export class SolicitudService {
     ninoId: string,
     usuario?: any,
   ): Promise<SolicitudResponseDto[]> {
-    const nino = await this.prisma.nino.findUnique({
-      where: { id: ninoId },
-      include: { solicitante: { include: { usuario: true } } },
-    });
-    if (!nino) {
-      throw new NotFoundException(`Niño con ID ${ninoId} no encontrado`);
-    }
+    const nino = await this.ninosService.findOne(ninoId);
 
     if (
       usuario?.rol === RolUsuario.SOLICITANTE &&
@@ -270,6 +266,7 @@ export class SolicitudService {
       },
       orderBy: { fechaSolicitud: 'desc' },
     });
+
     return solicitudes.map((s) => this.toResponseDto(s));
   }
 
@@ -606,22 +603,6 @@ export class SolicitudService {
 
   // ========== Métodos privados ==========
 
-  private async obtenerPeriodoActivo(fecha: Date): Promise<string> {
-    const periodo = await this.prisma.periodoOtorgamiento.findFirst({
-      where: {
-        fechaInicio: { lte: fecha },
-        fechaCierre: { gte: fecha },
-        activo: true,
-      },
-    });
-    if (!periodo) {
-      throw new NotFoundException(
-        'No hay un período de otorgamiento activo para la fecha actual',
-      );
-    }
-    return periodo.id;
-  }
-
   private calcularPrioridad(data: any, nino: any, solicitante: any): number {
     let prioridad = 0;
 
@@ -725,9 +706,17 @@ export class SolicitudService {
       },
       solicitante: {
         id: solicitud.solicitante.id,
+        correo: solicitud.solicitante.usuario?.email,
         nombre: solicitud.solicitante.usuario?.nombre,
         apellidos: solicitud.solicitante.usuario?.apellidos,
+        carnetIdentidad: solicitud.solicitante.usuario?.carnetIdentidad,
+        telefono: solicitud.solicitante.usuario?.telefono,
+        direccion: solicitud.solicitante.direccion,
+        tipoPersona: solicitud.solicitante.tipoPersona,
+        cantHijos: solicitud.solicitante.cantHijos,
+        centroTrabajo: solicitud.solicitante.centroTrabajo,
         municipio: solicitud.solicitante.usuario?.municipio,
+        provincia: solicitud.solicitante.usuario?.provincia,
       },
       documentos:
         solicitud.documentos?.map((doc) => ({

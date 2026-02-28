@@ -6,6 +6,8 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  forwardRef,
+  Inject,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateUsuarioDto } from './dto/create-usuario.dto';
@@ -17,19 +19,21 @@ import { CreatePerfilSolicitanteDto } from '../perfiles/perfil-solicitante/dto/c
 import { CreatePerfilFuncionarioDto } from '../perfiles/perfil-funcionario/dto/create-perfil-funcionario.dto';
 import { CreatePerfilComisionDto } from '../perfiles/perfil-comision/dto/create-perfil-comision.dto';
 import { CreatePerfilDirectorDto } from '../perfiles/perfil-director/create-perfil-director.dto';
+import { PerfilesService } from '../perfiles/perfiles.service';
 
 @Injectable()
 export class UsuariosService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Inject(forwardRef(() => PerfilesService))
+    private perfilesService: PerfilesService,
+  ) {}
 
   async create(
     createUsuarioDto: CreateUsuarioDto,
   ): Promise<UsuarioResponseDto> {
-    // Validaciones de email y carnet (como antes)
-
     const hashedPassword = await bcrypt.hash(createUsuarioDto.password, 10);
 
-    // Usar transacción para crear usuario y perfil
     const usuario = await this.prisma.$transaction(async (prisma) => {
       // Crear usuario
       const newUser = await prisma.usuario.create({
@@ -49,67 +53,31 @@ export class UsuariosService {
 
       // Crear perfil según el rol
       switch (createUsuarioDto.rol) {
-        case RolUsuario.SOLICITANTE: {
-          const solicitanteData =
-            createUsuarioDto.perfil as CreatePerfilSolicitanteDto;
-          await prisma.perfilSolicitante.create({
-            data: {
-              usuarioId: newUser.id,
-              tipoPersona: solicitanteData.tipoPersona,
-              cantHijos: solicitanteData.cantHijos ?? 1,
-              direccion: solicitanteData.direccion,
-              centroTrabajo: solicitanteData.centroTrabajo,
-            },
-          });
+        case RolUsuario.SOLICITANTE:
+          await this.perfilesService.createPerfilSolicitante(
+            newUser.id,
+            createUsuarioDto.perfil as CreatePerfilSolicitanteDto,
+          );
           break;
-        }
-        case RolUsuario.FUNCIONARIO_MUNICIPAL: {
-          const funcionarioData =
-            createUsuarioDto.perfil as CreatePerfilFuncionarioDto;
-          await prisma.perfilFuncionario.create({
-            data: {
-              usuarioId: newUser.id,
-              cargo: funcionarioData.cargo,
-            },
-          });
+        case RolUsuario.FUNCIONARIO_MUNICIPAL:
+          await this.perfilesService.createPerfilFuncionario(
+            newUser.id,
+            createUsuarioDto.perfil as CreatePerfilFuncionarioDto,
+          );
           break;
-        }
-        case RolUsuario.COMISION_OTORGAMIENTO: {
-          const comisionData =
-            createUsuarioDto.perfil as CreatePerfilComisionDto;
-          await prisma.perfilComision.create({
-            data: {
-              usuarioId: newUser.id,
-              cargo: comisionData.cargo,
-            },
-          });
+        case RolUsuario.COMISION_OTORGAMIENTO:
+          await this.perfilesService.createPerfilComision(
+            newUser.id,
+            createUsuarioDto.perfil as CreatePerfilComisionDto,
+          );
           break;
-        }
-        case RolUsuario.DIRECTOR_CIRCULO: {
-          const directorData =
-            createUsuarioDto.perfil as CreatePerfilDirectorDto;
-          // Verificar que el círculo existe y no tiene director
-          const circulo = await prisma.circuloInfantil.findUnique({
-            where: { id: directorData.circuloId },
-          });
-          if (!circulo) {
-            throw new NotFoundException('Círculo no encontrado');
-          }
-          const directorExistente = await prisma.perfilDirector.findUnique({
-            where: { circuloId: directorData.circuloId },
-          });
-          if (directorExistente) {
-            throw new ConflictException('El círculo ya tiene un director');
-          }
-          await prisma.perfilDirector.create({
-            data: {
-              usuarioId: newUser.id,
-              circuloId: directorData.circuloId,
-            },
-          });
+        case RolUsuario.DIRECTOR_CIRCULO:
+          await this.perfilesService.createPerfilDirector(
+            newUser.id,
+            createUsuarioDto.perfil as CreatePerfilDirectorDto,
+          );
           break;
-        }
-        // Otros roles (ADMINISTRADOR) no tienen perfil
+        // ADMINISTRADOR no tiene perfil
       }
 
       // Retornar el usuario completo con perfiles
@@ -162,6 +130,46 @@ export class UsuariosService {
     }
 
     return this.toUsuarioResponseDto(usuario);
+  }
+
+  async findByCarnet(
+    carnetIdentidad: string,
+  ): Promise<UsuarioResponseDto | null> {
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { carnetIdentidad },
+      include: {
+        perfilSolicitante: true,
+        perfilFuncionario: true,
+        perfilComision: true,
+        perfilDirector: true,
+      },
+    });
+    if (!usuario) return null;
+    return this.toUsuarioResponseDto(usuario);
+  }
+
+  async getProfile(id: string) {
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id },
+      include: {
+        perfilSolicitante: true,
+        perfilFuncionario: true,
+        perfilComision: true,
+        perfilDirector: {
+          include: { circulo: true },
+        },
+        notificaciones: {
+          orderBy: { fecha: 'desc' },
+          take: 10,
+        },
+      },
+    });
+
+    if (!usuario) {
+      throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
+    }
+
+    return usuario;
   }
 
   async findByRol(rol: RolUsuario): Promise<UsuarioResponseDto[]> {

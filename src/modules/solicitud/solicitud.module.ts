@@ -1,11 +1,18 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { SolicitudService } from './solicitud.service';
 import { SolicitudController } from './solicitud.controller';
-import { TrazabilidadService } from '../trazabilidad/trazabilidad.service';
-import { NinosService } from '../nino/nino.service';
+import { PeriodoOtorgamientoModule } from '../periodo/periodo.module';
+import { NinosModule } from '../nino/nino.module';
+import { TrazabilidadModule } from '../trazabilidad/trazabilidad.module';
 
 @Module({
+  imports: [
+    PeriodoOtorgamientoModule,
+    NinosModule,
+    forwardRef(() => TrazabilidadModule),
+  ],
   controllers: [SolicitudController],
-  providers: [SolicitudService, TrazabilidadService, NinosService],
+  providers: [SolicitudService],
+  exports: [SolicitudService],
 })
 export class SolicitudModule {}

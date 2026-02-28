@@ -180,6 +180,29 @@ export class UsuariosController {
     return usuario;
   }
 
+  @Get('buscar/carnet/:carnetIdentidad')
+  @Roles(RolUsuario.ADMINISTRADOR)
+  @ApiOperation({ summary: 'Buscar usuario por carnet de identidad' })
+  @ApiParam({
+    name: 'carnetIdentidad',
+    description: 'Carnet de identidad del usuario',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Usuario encontrado',
+    type: UsuarioResponseDto,
+  })
+  @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
+  async findByCarnet(
+    @Param('carnetIdentidad') carnetIdentidad: string,
+  ): Promise<UsuarioResponseDto | { message: string }> {
+    const usuario = await this.usuariosService.findByCarnet(carnetIdentidad);
+    if (!usuario) {
+      return { message: `Usuario con carnet ${carnetIdentidad} no encontrado` };
+    }
+    return usuario;
+  }
+
   @Get(':id')
   @Roles(RolUsuario.ADMINISTRADOR, RolUsuario.FUNCIONARIO_MUNICIPAL)
   @ApiOperation({ summary: 'Obtener usuario por ID' })
@@ -192,6 +215,21 @@ export class UsuariosController {
   @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
   findOne(@Param('id', ParseUUIDPipe) id: string): Promise<UsuarioResponseDto> {
     return this.usuariosService.findOne(id);
+  }
+
+  @Get(':id/with-notifications')
+  @Roles(RolUsuario.ADMINISTRADOR) // Solo administradores pueden ver datos completos de otros usuarios
+  @ApiOperation({
+    summary: 'Obtener usuario completo con perfiles y notificaciones',
+  })
+  @ApiParam({ name: 'id', description: 'ID del usuario' })
+  @ApiResponse({
+    status: 200,
+    description: 'Usuario encontrado con detalles',
+  })
+  @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
+  async findUserWithNotifications(@Param('id', ParseUUIDPipe) id: string) {
+    return this.usuariosService.getProfile(id);
   }
 
   @Patch(':id')

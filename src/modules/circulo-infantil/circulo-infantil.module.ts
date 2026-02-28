@@ -5,5 +5,6 @@ import { CirculoInfantilController } from './circulo-infantil.controller';
 @Module({
   controllers: [CirculoInfantilController],
   providers: [CirculoInfantilService],
+  exports: [CirculoInfantilService],
 })
 export class CirculoInfantilModule {}

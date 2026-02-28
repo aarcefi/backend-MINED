@@ -5,5 +5,6 @@ import { PeriodoOtorgamientoController } from './periodo.controller';
 @Module({
   controllers: [PeriodoOtorgamientoController],
   providers: [PeriodoService],
+  exports: [PeriodoService],
 })
 export class PeriodoOtorgamientoModule {}

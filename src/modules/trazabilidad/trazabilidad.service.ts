@@ -1,19 +1,32 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  forwardRef,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateTrazabilidadDto, UpdateTrazabilidadDto } from './dto';
 import { EstadoSolicitud } from '@prisma/client';
+import { SolicitudService } from '../solicitud/solicitud.service';
+import { UsuariosService } from '../usuario/usuarios.service';
 
 @Injectable()
 export class TrazabilidadService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly usuarioService: UsuariosService,
+    @Inject(forwardRef(() => SolicitudService))
+    private solicitudService: SolicitudService,
+  ) {}
 
-  async create(data: CreateTrazabilidadDto) {
-    // Verificar que la solicitud existe
-    const solicitud = await this.prisma.solicitud.findUnique({
-      where: { id: data.solicitudId },
-    });
+  async create(data: CreateTrazabilidadDto, usuarioActual: any) {
+    // Verificar que la solicitud existe y que el usuario tiene permisos
+    const solicitud = await this.solicitudService.findOne(
+      data.solicitudId,
+      usuarioActual,
+    );
 
     if (!solicitud) {
       throw new NotFoundException(
@@ -21,11 +34,7 @@ export class TrazabilidadService {
       );
     }
 
-    // CORRECCIÓN: Verificar que el usuario existe en la tabla Usuario
-    const usuario = await this.prisma.usuario.findUnique({
-      where: { id: data.usuarioId },
-    });
-
+    const usuario = await this.usuarioService.findOne(data.usuarioId);
     if (!usuario) {
       throw new NotFoundException(
         `Usuario con ID ${data.usuarioId} no encontrado`,
@@ -38,6 +47,27 @@ export class TrazabilidadService {
         fecha: data.fecha ? new Date(data.fecha) : new Date(),
       },
     });
+  }
+
+  async crearTrazabilidadAutomatica(
+    solicitudId: string,
+    estadoAnterior: EstadoSolicitud | null,
+    estadoNuevo: EstadoSolicitud,
+    usuarioId: string,
+    comentario?: string,
+    usuarioActual?: any,
+  ) {
+    return this.create(
+      {
+        solicitudId,
+        estadoAnterior,
+        estadoNuevo,
+        usuarioId,
+        comentario,
+        fecha: new Date().toISOString(),
+      },
+      usuarioActual, // <-- pasar usuarioActual
+    );
   }
 
   async findAll(filtros?: {
@@ -146,33 +176,6 @@ export class TrazabilidadService {
     });
   }
 
-  async getHistorialCompleto(solicitudId: string) {
-    const trazabilidades = await this.prisma.trazabilidad.findMany({
-      where: { solicitudId },
-      include: {
-        usuario: true,
-      },
-      orderBy: {
-        fecha: 'asc',
-      },
-    });
-
-    const solicitud = await this.prisma.solicitud.findUnique({
-      where: { id: solicitudId },
-      include: {
-        nino: true,
-        documentos: true,
-        decisiones: true,
-        matricula: true,
-      },
-    });
-
-    return {
-      solicitud,
-      historial: trazabilidades,
-    };
-  }
-
   async update(id: string, data: UpdateTrazabilidadDto) {
     const trazabilidad = await this.prisma.trazabilidad.findUnique({
       where: { id },
@@ -269,22 +272,5 @@ export class TrazabilidadService {
         }),
       ),
     };
-  }
-
-  async crearTrazabilidadAutomatica(
-    solicitudId: string,
-    estadoAnterior: EstadoSolicitud | null,
-    estadoNuevo: EstadoSolicitud,
-    usuarioId: string,
-    comentario?: string,
-  ) {
-    return this.create({
-      solicitudId,
-      estadoAnterior,
-      estadoNuevo,
-      usuarioId,
-      comentario,
-      fecha: new Date().toISOString(),
-    });
   }
 }

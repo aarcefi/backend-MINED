@@ -25,6 +25,7 @@ import { RolesGuard } from '../../auth/guards/roles.guard';
 import { TrazabilidadService } from './trazabilidad.service';
 import { CreateTrazabilidadDto } from './dto/create-trazabilidad.dto';
 import { UpdateTrazabilidadDto } from './dto/update-trazabilidad.dto';
+import { GetUser } from 'src/auth/decorators/get-user.decorator';
 
 @ApiTags('Trazabilidad')
 @ApiBearerAuth()
@@ -42,8 +43,8 @@ export class TrazabilidadController {
     status: 404,
     description: 'Solicitud o usuario no encontrado',
   })
-  create(@Body() dto: CreateTrazabilidadDto) {
-    return this.service.create(dto);
+  create(@Body() dto: CreateTrazabilidadDto, @GetUser() usuario: any) {
+    return this.service.create(dto, usuario);
   }
 
   @Post('automatica')
@@ -51,7 +52,6 @@ export class TrazabilidadController {
   @ApiOperation({
     summary: 'Crear trazabilidad automática por cambio de estado',
   })
-  @ApiResponse({ status: 201, description: 'Trazabilidad creada exitosamente' })
   crearTrazabilidadAutomatica(
     @Body()
     data: {
@@ -61,6 +61,7 @@ export class TrazabilidadController {
       usuarioId: string;
       comentario?: string;
     },
+    @GetUser() usuario: any,
   ) {
     return this.service.crearTrazabilidadAutomatica(
       data.solicitudId,
@@ -68,6 +69,7 @@ export class TrazabilidadController {
       data.estadoNuevo,
       data.usuarioId,
       data.comentario,
+      usuario,
     );
   }
 
@@ -144,25 +146,6 @@ export class TrazabilidadController {
   })
   findBySolicitudId(@Param('solicitudId', ParseUUIDPipe) solicitudId: string) {
     return this.service.findBySolicitudId(solicitudId);
-  }
-
-  @Get('solicitud/:solicitudId/historial-completo')
-  @Roles(
-    RolUsuario.ADMINISTRADOR,
-    RolUsuario.FUNCIONARIO_MUNICIPAL,
-    RolUsuario.COMISION_OTORGAMIENTO,
-    RolUsuario.SOLICITANTE,
-  )
-  @ApiOperation({ summary: 'Obtener historial completo de una solicitud' })
-  @ApiParam({ name: 'solicitudId', description: 'ID de la solicitud' })
-  @ApiResponse({
-    status: 200,
-    description: 'Historial completo de la solicitud',
-  })
-  getHistorialCompleto(
-    @Param('solicitudId', ParseUUIDPipe) solicitudId: string,
-  ) {
-    return this.service.getHistorialCompleto(solicitudId);
   }
 
   @Get('usuario/:usuarioId')

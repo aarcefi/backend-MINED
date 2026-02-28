@@ -3,6 +3,7 @@ import {
   SectorPrioridad,
   TipoSolicitud,
   EstadoSolicitud,
+  TipoPersona,
 } from '@prisma/client';
 
 export class NinoResponseDto {
@@ -50,13 +51,37 @@ export class SolicitanteResponseDto {
   id: string;
 
   @ApiProperty()
+  correo: string;
+
+  @ApiProperty()
   nombre: string;
 
   @ApiProperty()
   apellidos: string;
 
   @ApiProperty()
+  carnetIdentidad: string;
+
+  @ApiProperty()
+  telefono: string;
+
+  @ApiProperty()
+  direccion: string;
+
+  @ApiProperty()
+  tipoPersona: TipoPersona;
+
+  @ApiProperty()
+  cantHijos: number;
+
+  @ApiProperty()
+  centroTrabajo: string;
+
+  @ApiProperty()
   municipio: string;
+
+  @ApiProperty()
+  provincia: string;
 }
 
 export class DocumentoSolicitudResponseDto {
