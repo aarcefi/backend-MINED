@@ -8,6 +8,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { MailModule } from '../mail/mail.module';
 import { PerfilesModule, UsuariosModule } from 'src/modules';
+import { ValidacionIdentidadModule } from 'src/modules/validacion-ficha-unica/validacion-ficha-unica.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { PerfilesModule, UsuariosModule } from 'src/modules';
     MailModule,
     UsuariosModule,
     PerfilesModule,
+    ValidacionIdentidadModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],

@@ -27,7 +27,6 @@ export class TrazabilidadService {
       data.solicitudId,
       usuarioActual,
     );
-
     if (!solicitud) {
       throw new NotFoundException(
         `Solicitud con ID ${data.solicitudId} no encontrada`,
@@ -66,7 +65,7 @@ export class TrazabilidadService {
         comentario,
         fecha: new Date().toISOString(),
       },
-      usuarioActual, // <-- pasar usuarioActual
+      usuarioActual,
     );
   }
 

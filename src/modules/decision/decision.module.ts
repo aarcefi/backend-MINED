@@ -5,5 +5,6 @@ import { DecisionSolicitudController } from './decision.controller';
 @Module({
   controllers: [DecisionSolicitudController],
   providers: [DecisionSolicitudService],
+  exports: [DecisionSolicitudService],
 })
 export class DecisionSolicitudModule {}

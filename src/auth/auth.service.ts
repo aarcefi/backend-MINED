@@ -24,6 +24,7 @@ import { MailService } from 'src/mail/mail.service';
 import { randomInt } from 'crypto';
 import { PerfilesService } from 'src/modules/perfiles/perfiles.service';
 import { UsuariosService } from 'src/modules/usuario/usuarios.service';
+import { ValidacionIdentidadService } from 'src/modules/validacion-ficha-unica/validacion-ficha-unica.service';
 
 function parseExpiresIn(expiresIn: string): number {
   if (!isNaN(Number(expiresIn))) {
@@ -60,6 +61,7 @@ export class AuthService {
     private mailService: MailService,
     private usuariosService: UsuariosService,
     private perfilesService: PerfilesService,
+    private validacionFichaUnica: ValidacionIdentidadService,
   ) {}
 
   async validateUser(
@@ -109,6 +111,10 @@ export class AuthService {
   }
 
   async register(registerDto: RegisterDto): Promise<RegisterResponseDto> {
+    await this.validacionFichaUnica.verificarCarnetIdentidad(
+      registerDto.datosSolicitante.carnetIdentidad,
+    );
+
     const existingUser = await this.usuariosService.findByEmail(
       registerDto.email,
     );
@@ -205,11 +211,24 @@ export class AuthService {
     const perfil = await this.perfilesService.findPerfilByUsuarioId(userId);
     if (perfil) {
       const { usuario, notificaciones, ...perfilData } = perfil;
-      const usuarioCompleto = {
+      const usuarioCompleto: any = {
         ...usuario,
-        [`perfil${usuario.rol}`]: perfilData, // Asignar perfil según rol
         notificaciones,
       };
+      switch (usuario.rol) {
+        case RolUsuario.SOLICITANTE:
+          usuarioCompleto.perfilSolicitante = perfilData;
+          break;
+        case RolUsuario.FUNCIONARIO_MUNICIPAL:
+          usuarioCompleto.perfilFuncionario = perfilData;
+          break;
+        case RolUsuario.COMISION_OTORGAMIENTO:
+          usuarioCompleto.perfilComision = perfilData;
+          break;
+        case RolUsuario.DIRECTOR_CIRCULO:
+          usuarioCompleto.perfilDirector = perfilData;
+          break;
+      }
       return this.createUsuarioResponse(usuarioCompleto);
     } else {
       const usuario = await this.usuariosService.getProfile(userId);

@@ -218,7 +218,7 @@ export class UsuariosController {
   }
 
   @Get(':id/with-notifications')
-  @Roles(RolUsuario.ADMINISTRADOR) // Solo administradores pueden ver datos completos de otros usuarios
+  @Roles(RolUsuario.ADMINISTRADOR)
   @ApiOperation({
     summary: 'Obtener usuario completo con perfiles y notificaciones',
   })

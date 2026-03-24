@@ -4,11 +4,13 @@ import { SolicitudController } from './solicitud.controller';
 import { PeriodoOtorgamientoModule } from '../periodo/periodo.module';
 import { NinosModule } from '../nino/nino.module';
 import { TrazabilidadModule } from '../trazabilidad/trazabilidad.module';
+import { ValidacionIdentidadModule } from '../validacion-ficha-unica/validacion-ficha-unica.module';
 
 @Module({
   imports: [
     PeriodoOtorgamientoModule,
     NinosModule,
+    ValidacionIdentidadModule,
     forwardRef(() => TrazabilidadModule),
   ],
   controllers: [SolicitudController],

@@ -1,3 +1,4 @@
+export * from './enums/enums.module';
 export * from './nino/nino.module';
 export * from './solicitud/solicitud.module';
 export * from './documento/documento.module';

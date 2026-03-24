@@ -26,6 +26,7 @@ import {
 } from '@prisma/client';
 import { SolicitudResponseDto } from './dto/solicitud-response.dto';
 import { PeriodoService } from '../periodo/periodo.service';
+import { ValidacionIdentidadService } from '../validacion-ficha-unica/validacion-ficha-unica.service';
 
 @Injectable()
 export class SolicitudService {
@@ -35,6 +36,7 @@ export class SolicitudService {
     private readonly periodoService: PeriodoService,
     @Inject(forwardRef(() => TrazabilidadService))
     private trazabilidadService: TrazabilidadService,
+    private validacionFichaUnica: ValidacionIdentidadService,
   ) {}
 
   async create(
@@ -76,6 +78,9 @@ export class SolicitudService {
     });
 
     if (!nino) {
+      await this.validacionFichaUnica.verificarCarnetIdentidad(
+        data.nino.tarjetaMenor,
+      );
       // Crear nuevo niño usando NinosService
       const createNinoDto: CreateNinoDto = {
         ...data.nino,
@@ -134,7 +139,7 @@ export class SolicitudService {
       solicitud.id,
       null,
       data.estado,
-      usuario.id,
+      usuario,
       'Solicitud creada',
     );
 

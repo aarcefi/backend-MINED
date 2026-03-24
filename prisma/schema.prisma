@@ -389,3 +389,29 @@ model Notificacion {
 
   @@map("notificaciones")
 }
+
+model EnumChangeLog {
+  id           String   @id @default(uuid())
+  enumName     String
+  operation    String   // 'ADD', 'UPDATE', 'DELETE'
+  oldValue     String?
+  newValue     String
+  changedBy    String   // usuarioId
+  changedAt    DateTime @default(now())
+  status       String   // 'PENDING', 'APPLIED', 'FAILED'
+  errorMessage String?
+  appliedAt    DateTime?
+
+  @@map("enum_change_logs")
+}
+
+model Ciudadano {
+  carnetIdentidad String   @id @map("carnet_identidad")
+  nombre          String?
+  apellidos       String?
+  fechaNacimiento DateTime? @map("fecha_nacimiento")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @default(now()) @map("updated_at")
+
+  @@map("ciudadanos")
+}
