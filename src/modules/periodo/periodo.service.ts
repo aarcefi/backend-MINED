@@ -13,7 +13,6 @@ export class PeriodoService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(data: CreatePeriodoDto) {
-    // Validar que no haya superposición de fechas con períodos activos
     const periodosSuperpuestos = await this.prisma.periodoOtorgamiento.findMany(
       {
         where: {
@@ -344,5 +343,25 @@ export class PeriodoService {
       promedioSolicitudesPorPeriodo: total > 0 ? solicitudesTotales / total : 0,
       promedioCuposPorPeriodo: total > 0 ? cuposTotales / total : 0,
     };
+  }
+
+  public async obtenerPeriodoActivo(fecha: Date) {
+    const startOfDay = new Date(fecha);
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const periodo = await this.prisma.periodoOtorgamiento.findFirst({
+      where: {
+        fechaInicio: { lte: startOfDay },
+        fechaCierre: { gte: startOfDay },
+        activo: true,
+      },
+    });
+
+    if (!periodo) {
+      throw new NotFoundException(
+        'No hay un período de otorgamiento activo para la fecha actual',
+      );
+    }
+    return periodo;
   }
 }

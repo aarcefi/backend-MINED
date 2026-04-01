@@ -14,6 +14,7 @@ import {
   UseGuards,
   Request,
   UnauthorizedException,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -22,6 +23,7 @@ import {
   ApiParam,
   ApiBearerAuth,
   ApiQuery,
+  ApiBody,
 } from '@nestjs/swagger';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import {
@@ -337,7 +339,26 @@ export class SolicitudController {
   )
   @ApiOperation({ summary: 'Cambiar estado de solicitud' })
   @ApiParam({ name: 'id', description: 'ID de la solicitud' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        estado: {
+          type: 'string',
+          enum: Object.values(EstadoSolicitud),
+          example: 'APROBADA',
+        },
+        comentario: {
+          type: 'string',
+          example: 'Aprobada por comisión',
+          nullable: true,
+        },
+      },
+      required: ['estado'],
+    },
+  })
   @ApiResponse({ status: 200, description: 'Estado actualizado' })
+  @ApiResponse({ status: 400, description: 'Estado requerido' })
   @ApiResponse({ status: 404, description: 'Solicitud no encontrada' })
   cambiarEstado(
     @Request() req,
@@ -345,10 +366,13 @@ export class SolicitudController {
     @Body('estado') estado: EstadoSolicitud,
     @Body('comentario') comentario?: string,
   ) {
+    if (!estado) {
+      throw new BadRequestException('El campo "estado" es requerido');
+    }
     return this.solicitudService.cambiarEstado(
       id,
       estado,
-      req.user.id,
+      req.user,
       comentario,
     );
   }

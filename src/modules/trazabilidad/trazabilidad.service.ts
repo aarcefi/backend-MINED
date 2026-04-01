@@ -42,7 +42,11 @@ export class TrazabilidadService {
 
     return this.prisma.trazabilidad.create({
       data: {
-        ...data,
+        solicitudId: data.solicitudId,
+        estadoAnterior: data.estadoAnterior,
+        estadoNuevo: data.estadoNuevo,
+        usuarioId: data.usuarioId,
+        comentario: data.comentario,
         fecha: data.fecha ? new Date(data.fecha) : new Date(),
       },
     });

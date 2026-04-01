@@ -54,20 +54,10 @@ export class SolicitudService {
       );
     }
 
-    // Obtener período activo usando PeriodoService
-    const periodoActivo = await this.periodoService.findActivo();
-    if (!periodoActivo) {
-      throw new NotFoundException('No hay un período de otorgamiento activo');
-    }
     const fechaActual = new Date();
-    if (
-      fechaActual < periodoActivo.fechaInicio ||
-      fechaActual > periodoActivo.fechaCierre
-    ) {
-      throw new ConflictException(
-        'La fecha actual está fuera del período activo',
-      );
-    }
+
+    const periodoActivo =
+      await this.periodoService.obtenerPeriodoActivo(fechaActual);
 
     // Buscar niño existente por tarjetaMenor y solicitanteId
     let nino = await this.prisma.nino.findFirst({
@@ -139,8 +129,9 @@ export class SolicitudService {
       solicitud.id,
       null,
       data.estado,
-      usuario,
+      usuario.id,
       'Solicitud creada',
+      usuario,
     );
 
     return this.toResponseDto(solicitud);
@@ -396,6 +387,7 @@ export class SolicitudService {
           usuario.rol === RolUsuario.SOLICITANTE
           ? 'Solicitud cancelada por el solicitante'
           : 'Estado actualizado',
+        usuario,
       );
     }
 
@@ -471,8 +463,8 @@ export class SolicitudService {
 
   async cambiarEstado(
     id: string,
-    estado: EstadoSolicitud,
-    usuarioId: string,
+    nuevoEstado: EstadoSolicitud,
+    usuario: any,
     comentario?: string,
   ): Promise<SolicitudResponseDto> {
     const solicitud = await this.prisma.solicitud.findUnique({
@@ -483,21 +475,23 @@ export class SolicitudService {
         solicitante: { include: { usuario: true } },
       },
     });
-    if (!solicitud) {
+    if (!solicitud)
       throw new NotFoundException(`Solicitud con ID ${id} no encontrada`);
-    }
+
+    this.verificarPermisosSolicitud(solicitud, usuario);
 
     await this.trazabilidadService.crearTrazabilidadAutomatica(
       id,
       solicitud.estado,
-      estado,
-      usuarioId,
-      comentario || 'Cambio de estado',
+      nuevoEstado,
+      usuario.id,
+      comentario || `Cambio de estado: ${solicitud.estado} → ${nuevoEstado}`,
+      usuario,
     );
 
     const solicitudActualizada = await this.prisma.solicitud.update({
       where: { id },
-      data: { estado },
+      data: { estado: nuevoEstado },
       include: {
         nino: true,
         periodo: true,
@@ -626,8 +620,6 @@ export class SolicitudService {
     if (nino.casoEspecial) prioridad += 15;
     if (nino.tipoNecesidad) prioridad += 10;
     if (solicitante.cantHijos > 1) prioridad += (solicitante.cantHijos - 1) * 5;
-    // Nota: tipoPersona ya no existe en solicitante? Se mantenía, pero si no, eliminar o ajustar
-    // if (solicitante.tipoPersona === 'JURIDICA') prioridad += 5; // Comentado porque no está en el nuevo esquema
 
     return prioridad;
   }
