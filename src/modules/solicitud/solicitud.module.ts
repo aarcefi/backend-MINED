@@ -5,6 +5,7 @@ import { PeriodoOtorgamientoModule } from '../periodo/periodo.module';
 import { NinosModule } from '../nino/nino.module';
 import { TrazabilidadModule } from '../trazabilidad/trazabilidad.module';
 import { ValidacionIdentidadModule } from '../validacion-ficha-unica/validacion-ficha-unica.module';
+import { PriorityModule } from '../prioridades/prioridad.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { ValidacionIdentidadModule } from '../validacion-ficha-unica/validacion-
     NinosModule,
     ValidacionIdentidadModule,
     forwardRef(() => TrazabilidadModule),
+    PriorityModule,
   ],
   controllers: [SolicitudController],
   providers: [SolicitudService],

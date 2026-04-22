@@ -27,6 +27,7 @@ import {
 import { SolicitudResponseDto } from './dto/solicitud-response.dto';
 import { PeriodoService } from '../periodo/periodo.service';
 import { ValidacionIdentidadService } from '../validacion-ficha-unica/validacion-ficha-unica.service';
+import { PriorityCalculator, PriorityContext } from '../prioridades/index';
 
 @Injectable()
 export class SolicitudService {
@@ -37,6 +38,7 @@ export class SolicitudService {
     @Inject(forwardRef(() => TrazabilidadService))
     private trazabilidadService: TrazabilidadService,
     private validacionFichaUnica: ValidacionIdentidadService,
+    private priorityCalculator: PriorityCalculator,
   ) {}
 
   async create(
@@ -100,8 +102,18 @@ export class SolicitudService {
       );
     }
 
-    // Calcular prioridad
-    const prioridad = this.calcularPrioridad(data, nino, solicitante);
+    const context: PriorityContext = {
+      sector: data.sector,
+      tipoSolicitud: data.tipoSolicitud,
+      nino: {
+        casoEspecial: nino.casoEspecial,
+        tipoNecesidad: nino.tipoNecesidad ?? undefined,
+      },
+      solicitante: {
+        cantHijos: solicitante.cantHijos,
+      },
+    };
+    const prioridad = this.priorityCalculator.calculatePriority(context);
 
     // Crear solicitud
     const solicitud = await this.prisma.solicitud.create({
@@ -300,6 +312,7 @@ export class SolicitudService {
     data: UpdateSolicitudDto,
     usuario: any,
   ): Promise<SolicitudResponseDto> {
+    // Obtener la solicitud con relaciones necesarias
     const solicitud = await this.prisma.solicitud.findUnique({
       where: { id },
       include: {
@@ -312,15 +325,20 @@ export class SolicitudService {
       throw new NotFoundException(`Solicitud con ID ${id} no encontrada`);
     }
 
+    // Verificar permisos de acceso (lectura) usando el método existente
     this.verificarPermisosSolicitud(solicitud, usuario);
 
     const updateData: any = {};
 
-    // Si es solicitante, solo puede modificar observaciones o cancelar (estado RECHAZADA)
+    // Reglas según el rol
     if (usuario.rol === RolUsuario.SOLICITANTE) {
-      if (data.observaciones !== undefined) {
+      // El solicitante (owner) puede modificar sector, tipoSolicitud y observaciones
+      if (data.sector !== undefined) updateData.sector = data.sector;
+      if (data.tipoSolicitud !== undefined)
+        updateData.tipoSolicitud = data.tipoSolicitud;
+      if (data.observaciones !== undefined)
         updateData.observaciones = data.observaciones;
-      }
+      // Solo puede cambiar el estado a RECHAZADA (cancelar)
       if (
         data.estado === EstadoSolicitud.RECHAZADA &&
         usuario.perfilId === solicitud.solicitanteId
@@ -328,42 +346,39 @@ export class SolicitudService {
         updateData.estado = data.estado;
       }
     } else {
-      // Otros roles pueden modificar más campos
+      // Otros roles (funcionario, comisión, director, admin) pueden modificar todo
       if (data.sector !== undefined) updateData.sector = data.sector;
       if (data.tipoSolicitud !== undefined)
         updateData.tipoSolicitud = data.tipoSolicitud;
       if (data.estado !== undefined) updateData.estado = data.estado;
       if (data.observaciones !== undefined)
         updateData.observaciones = data.observaciones;
-
-      // Recalcular prioridad si es necesario
-      const necesitaRecalcularPrioridad =
-        data.necesitaActualizarPrioridad ||
-        data.sector !== undefined ||
-        data.tipoSolicitud !== undefined ||
-        data.estado !== undefined;
-
-      if (necesitaRecalcularPrioridad) {
-        const prioridad = this.calcularPrioridad(
-          {
-            sector: data.sector || solicitud.sector,
-            tipoSolicitud: data.tipoSolicitud || solicitud.tipoSolicitud,
-            estado: data.estado || solicitud.estado,
-            observaciones: data.observaciones || solicitud.observaciones,
-            solicitanteId: solicitud.solicitanteId,
-            nino: solicitud.nino,
-          } as any,
-          solicitud.nino,
-          solicitud.solicitante,
-        );
-        updateData.prioridad = prioridad;
-      }
     }
 
+    // Recalcular prioridad si cambió sector o tipoSolicitud (para cualquier rol)
+    const necesitaRecalcular =
+      data.sector !== undefined || data.tipoSolicitud !== undefined;
+    if (necesitaRecalcular) {
+      const context: PriorityContext = {
+        sector: data.sector ?? solicitud.sector,
+        tipoSolicitud: data.tipoSolicitud ?? solicitud.tipoSolicitud,
+        nino: {
+          casoEspecial: solicitud.nino.casoEspecial,
+          tipoNecesidad: solicitud.nino.tipoNecesidad ?? undefined,
+        },
+        solicitante: {
+          cantHijos: solicitud.solicitante.cantHijos,
+        },
+      };
+      updateData.prioridad = this.priorityCalculator.calculatePriority(context);
+    }
+
+    // Si no hay nada que actualizar, retornar sin cambios
     if (Object.keys(updateData).length === 0) {
       return this.toResponseDto(solicitud);
     }
 
+    // Aplicar actualización
     const solicitudActualizada = await this.prisma.solicitud.update({
       where: { id },
       data: updateData,
@@ -407,47 +422,42 @@ export class SolicitudService {
         periodo: true,
       },
     });
-    if (!solicitud) {
+    if (!solicitud)
       throw new NotFoundException(`Solicitud con ID ${id} no encontrada`);
-    }
-    if (!solicitud.nino) {
-      throw new NotFoundException(
-        `No se encontró niño asociado a la solicitud`,
-      );
-    }
+    if (!solicitud.nino)
+      throw new NotFoundException('No se encontró niño asociado');
 
     this.verificarPermisosSolicitud(solicitud, usuario);
 
-    // Actualizar niño usando NinosService
     const ninoActualizado = await this.ninosService.update(
       solicitud.nino.id,
       updateNinoDto,
     );
 
     // Recalcular prioridad si afecta
-    const necesitaRecalcularPrioridad =
+    const necesitaRecalcular =
       updateNinoDto.casoEspecial !== undefined ||
       updateNinoDto.tipoNecesidad !== undefined;
-    if (necesitaRecalcularPrioridad) {
-      const prioridad = this.calcularPrioridad(
-        {
-          sector: solicitud.sector,
-          tipoSolicitud: solicitud.tipoSolicitud,
-          estado: solicitud.estado,
-          observaciones: solicitud.observaciones,
-          solicitanteId: solicitud.solicitanteId,
-          nino: { ...solicitud.nino, ...updateNinoDto },
-        } as any,
-        ninoActualizado,
-        solicitud.solicitante,
-      );
+
+    if (necesitaRecalcular) {
+      const context: PriorityContext = {
+        sector: solicitud.sector,
+        tipoSolicitud: solicitud.tipoSolicitud,
+        nino: {
+          casoEspecial: ninoActualizado.casoEspecial,
+          tipoNecesidad: ninoActualizado.tipoNecesidad ?? undefined,
+        },
+        solicitante: {
+          cantHijos: solicitud.solicitante.cantHijos,
+        },
+      };
+      const nuevaPrioridad = this.priorityCalculator.calculatePriority(context);
       await this.prisma.solicitud.update({
         where: { id },
-        data: { prioridad },
+        data: { prioridad: nuevaPrioridad },
       });
     }
 
-    // Obtener solicitud actualizada
     const solicitudCompleta = await this.prisma.solicitud.findUnique({
       where: { id },
       include: {

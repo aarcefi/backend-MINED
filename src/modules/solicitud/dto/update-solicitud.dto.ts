@@ -1,6 +1,6 @@
 // update-solicitud.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsString, IsOptional, IsBoolean } from 'class-validator';
+import { IsEnum, IsString, IsOptional } from 'class-validator';
 import {
   SectorPrioridad,
   TipoSolicitud,
@@ -27,9 +27,4 @@ export class UpdateSolicitudDto {
   @IsOptional()
   @IsString()
   observaciones?: string;
-
-  @ApiProperty({ required: false, default: false })
-  @IsOptional()
-  @IsBoolean()
-  necesitaActualizarPrioridad?: boolean = false;
 }
