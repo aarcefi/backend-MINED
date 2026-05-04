@@ -18,6 +18,7 @@ import { TrazabilidadModule } from './modules/index';
 import { UsuariosModule } from './modules/index';
 import { PerfilesModule } from './modules/index';
 import { NotificacionesModule } from './modules/index';
+import { EventsModule } from './common/events/events.module';
 import jwtConfig from './config/jwt.config';
 
 @Module({
@@ -28,6 +29,7 @@ import jwtConfig from './config/jwt.config';
       load: [jwtConfig],
     }),
     PrismaModule,
+    EventsModule,
     EnumsModule,
     AuthModule,
     UsuariosModule,

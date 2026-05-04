@@ -27,7 +27,12 @@ import {
 import { SolicitudResponseDto } from './dto/solicitud-response.dto';
 import { PeriodoService } from '../periodo/periodo.service';
 import { ValidacionIdentidadService } from '../validacion-ficha-unica/validacion-ficha-unica.service';
-import { PriorityCalculator, PriorityContext } from '../prioridades/index';
+import {
+  PriorityCalculator,
+  PriorityContext,
+} from '../../common/prioridades/index';
+import { EventDispatcher } from '../../common/events/event-dispatcher.service';
+import { SolicitudEstadoChangedEvent } from './events/solicitud-estado-changed.event';
 
 @Injectable()
 export class SolicitudService {
@@ -39,6 +44,7 @@ export class SolicitudService {
     private trazabilidadService: TrazabilidadService,
     private validacionFichaUnica: ValidacionIdentidadService,
     private priorityCalculator: PriorityCalculator,
+    private eventDispatcher: EventDispatcher,
   ) {}
 
   async create(
@@ -329,28 +335,27 @@ export class SolicitudService {
     this.verificarPermisosSolicitud(solicitud, usuario);
 
     const updateData: any = {};
+    let estadoCambio = false;
+    const estadoAnterior = solicitud.estado;
 
     // Reglas según el rol
     if (usuario.rol === RolUsuario.SOLICITANTE) {
-      // El solicitante (owner) puede modificar sector, tipoSolicitud y observaciones
       if (data.sector !== undefined) updateData.sector = data.sector;
       if (data.tipoSolicitud !== undefined)
         updateData.tipoSolicitud = data.tipoSolicitud;
       if (data.observaciones !== undefined)
         updateData.observaciones = data.observaciones;
-      // Solo puede cambiar el estado a RECHAZADA (cancelar)
-      if (
-        data.estado === EstadoSolicitud.RECHAZADA &&
-        usuario.perfilId === solicitud.solicitanteId
-      ) {
-        updateData.estado = data.estado;
-      }
     } else {
       // Otros roles (funcionario, comisión, director, admin) pueden modificar todo
       if (data.sector !== undefined) updateData.sector = data.sector;
       if (data.tipoSolicitud !== undefined)
         updateData.tipoSolicitud = data.tipoSolicitud;
-      if (data.estado !== undefined) updateData.estado = data.estado;
+      if (data.estado !== undefined) {
+        updateData.estado = data.estado;
+        if (data.estado !== estadoAnterior) {
+          estadoCambio = true;
+        }
+      }
       if (data.observaciones !== undefined)
         updateData.observaciones = data.observaciones;
     }
@@ -391,19 +396,38 @@ export class SolicitudService {
       },
     });
 
-    // Trazabilidad si cambió el estado
-    if (data.estado && data.estado !== solicitud.estado) {
+    // Trazabilidad si cambió el estado (solo para roles que pueden hacerlo)
+    if (estadoCambio && data.estado) {
       await this.trazabilidadService.crearTrazabilidadAutomatica(
         id,
-        solicitud.estado,
+        estadoAnterior,
         data.estado,
         usuario.id,
-        data.estado === EstadoSolicitud.RECHAZADA &&
-          usuario.rol === RolUsuario.SOLICITANTE
-          ? 'Solicitud cancelada por el solicitante'
+        data.estado === EstadoSolicitud.RECHAZADA_COMISION ||
+          data.estado === EstadoSolicitud.RECHAZADA_DIRECCION
+          ? 'Solicitud rechazada'
           : 'Estado actualizado',
         usuario,
       );
+    }
+
+    // Disparar evento de cambio de estado
+    if (estadoCambio && data.estado && usuario.rol !== RolUsuario.SOLICITANTE) {
+      const nino = solicitud.nino;
+      const solicitanteUsuario = solicitud.solicitante.usuario;
+      const nombreSolicitante = `${solicitanteUsuario.nombre} ${solicitanteUsuario.apellidos}`;
+      const evento = new SolicitudEstadoChangedEvent({
+        solicitudId: id,
+        usuarioId: solicitanteUsuario.id,
+        email: solicitanteUsuario.email,
+        nombreSolicitante,
+        ninoNombre: nino.nombre,
+        ninoApellidos: nino.apellidos,
+        estadoAnterior,
+        estadoNuevo: data.estado,
+        comentario: data.observaciones,
+      });
+      await this.eventDispatcher.dispatch(evento);
     }
 
     return this.toResponseDto(solicitudActualizada);
@@ -485,11 +509,21 @@ export class SolicitudService {
         solicitante: { include: { usuario: true } },
       },
     });
-    if (!solicitud)
+    if (!solicitud) {
       throw new NotFoundException(`Solicitud con ID ${id} no encontrada`);
+    }
 
     this.verificarPermisosSolicitud(solicitud, usuario);
 
+    if (usuario.rol === RolUsuario.SOLICITANTE) {
+      throw new ForbiddenException(
+        'Los solicitantes no pueden cambiar el estado de sus solicitudes',
+      );
+    }
+
+    const estadoAnterior = solicitud.estado;
+
+    // Trazabilidad
     await this.trazabilidadService.crearTrazabilidadAutomatica(
       id,
       solicitud.estado,
@@ -499,6 +533,7 @@ export class SolicitudService {
       usuario,
     );
 
+    // Actualizar estado
     const solicitudActualizada = await this.prisma.solicitud.update({
       where: { id },
       data: { estado: nuevoEstado },
@@ -510,6 +545,25 @@ export class SolicitudService {
         matricula: true,
       },
     });
+
+    // Datos del solicitante y del niño para notificaciones
+    const solicitanteUsuario = solicitud.solicitante.usuario;
+    const nino = solicitud.nino;
+    const nombreSolicitante = `${solicitanteUsuario.nombre} ${solicitanteUsuario.apellidos}`;
+
+    // Disparar evento para notificaciones y correo
+    const evento = new SolicitudEstadoChangedEvent({
+      solicitudId: id,
+      usuarioId: solicitanteUsuario.id,
+      email: solicitanteUsuario.email,
+      nombreSolicitante,
+      ninoNombre: nino.nombre,
+      ninoApellidos: nino.apellidos,
+      estadoAnterior,
+      estadoNuevo: nuevoEstado,
+      comentario,
+    });
+    await this.eventDispatcher.dispatch(evento);
 
     return this.toResponseDto(solicitudActualizada);
   }
@@ -569,8 +623,11 @@ export class SolicitudService {
     const total = solicitudes.length;
     const porEstado = {
       EN_REVISION: 0,
-      APROBADA: 0,
-      RECHAZADA: 0,
+      REVISADA: 0,
+      APROBADA_COMISION: 0,
+      APROBADA_DIRECCION: 0,
+      RECHAZADA_COMISION: 0,
+      RECHAZADA_DIRECCION: 0,
       EN_ESPERA: 0,
     };
     const porSector = {
@@ -598,8 +655,15 @@ export class SolicitudService {
       porEstado,
       porcentajesEstado: {
         EN_REVISION: total > 0 ? (porEstado.EN_REVISION / total) * 100 : 0,
-        APROBADA: total > 0 ? (porEstado.APROBADA / total) * 100 : 0,
-        RECHAZADA: total > 0 ? (porEstado.RECHAZADA / total) * 100 : 0,
+        REVISADA: total > 0 ? (porEstado.REVISADA / total) * 100 : 0,
+        APROBADA_COMISION:
+          total > 0 ? (porEstado.APROBADA_COMISION / total) * 100 : 0,
+        APROBADA_DIRECCION:
+          total > 0 ? (porEstado.APROBADA_DIRECCION / total) * 100 : 0,
+        RECHAZADA_COMISION:
+          total > 0 ? (porEstado.RECHAZADA_COMISION / total) * 100 : 0,
+        RECHAZADA_DIRECCION:
+          total > 0 ? (porEstado.RECHAZADA_DIRECCION / total) * 100 : 0,
         EN_ESPERA: total > 0 ? (porEstado.EN_ESPERA / total) * 100 : 0,
       },
       porSector,
@@ -611,28 +675,6 @@ export class SolicitudService {
   }
 
   // ========== Métodos privados ==========
-
-  private calcularPrioridad(data: any, nino: any, solicitante: any): number {
-    let prioridad = 0;
-
-    const prioridadSector = {
-      SALUD: 30,
-      EDUCACION: 25,
-      DEFENSA: 20,
-      CASO_SOCIAL: 35,
-      OTRO: 10,
-    };
-    prioridad += prioridadSector[data.sector] || 10;
-
-    const prioridadTipo = { TRABAJADOR: 20, ESTUDIANTE: 25, CASO_SOCIAL: 30 };
-    prioridad += prioridadTipo[data.tipoSolicitud] || 15;
-
-    if (nino.casoEspecial) prioridad += 15;
-    if (nino.tipoNecesidad) prioridad += 10;
-    if (solicitante.cantHijos > 1) prioridad += (solicitante.cantHijos - 1) * 5;
-
-    return prioridad;
-  }
 
   private verificarPermisosSolicitud(solicitud: any, usuario: any): void {
     if (

@@ -9,10 +9,15 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateMatriculaDto } from './dto/create-matricula.dto';
 import { UpdateMatriculaDto } from './dto/update-matricula.dto';
 import { EstadoMatricula } from '@prisma/client';
+import { MatriculaCreadaEvent } from './events/matricula-creada.event';
+import { EventDispatcher } from 'src/common/events/event-dispatcher.service';
 
 @Injectable()
 export class MatriculasService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private eventDispatcher: EventDispatcher,
+  ) {}
 
   async create(createMatriculaDto: CreateMatriculaDto) {
     // Verificar que la solicitud existe
@@ -82,19 +87,19 @@ export class MatriculasService {
         include: {
           solicitud: {
             include: {
-              nino: {
+              nino: { include: { solicitante: true } },
+              periodo: true,
+              solicitante: {
                 include: {
-                  solicitante: true,
+                  usuario: true,
                 },
               },
-              periodo: true,
             },
           },
           circulo: true,
           controles: true,
         },
       }),
-      // Actualizar capacidad del círculo
       this.prisma.capacidadCirculo.update({
         where: {
           circuloId_periodoId: {
@@ -108,6 +113,25 @@ export class MatriculasService {
         },
       }),
     ]);
+
+    // Disparar evento para notificaciones y correo
+    // Obtener datos del solicitante a partir de la solicitud
+    const solicitante = matricula.solicitud.solicitante;
+    const usuario = solicitante.usuario; // Asumiendo que el solicitante tiene relación 'usuario'
+
+    if (usuario) {
+      const evento = new MatriculaCreadaEvent({
+        matriculaId: matricula.id,
+        folio: matricula.folio,
+        usuarioId: usuario.id,
+        email: usuario.email,
+        nombre: `${usuario.nombre} ${usuario.apellidos}`,
+        circuloNombre: matricula.circulo.nombre,
+        fechaOtorgamiento: matricula.fechaOtorgamiento,
+        fechaLimite: matricula.fechaLimite,
+      });
+      await this.eventDispatcher.dispatch(evento);
+    }
 
     return matricula;
   }

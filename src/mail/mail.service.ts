@@ -1,6 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 import { Injectable } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import { ConfigService } from '@nestjs/config';
@@ -13,7 +10,7 @@ export class MailService {
     this.transporter = nodemailer.createTransport({
       host: this.configService.get('MAIL_HOST'),
       port: this.configService.get('MAIL_PORT'),
-      secure: false, // true para 465
+      secure: true, // true para 465
       auth: {
         user: this.configService.get('MAIL_USER'),
         pass: this.configService.get('MAIL_PASSWORD'),
@@ -43,6 +40,21 @@ export class MailService {
         <p>Tu cuenta ha sido creada exitosamente.</p>
         <p>Ya puedes iniciar sesión en el sistema.</p>
       `,
+    };
+    await this.transporter.sendMail(mailOptions);
+  }
+  async sendCustomEmail(
+    to: string,
+    subject: string,
+    text: string,
+    html?: string,
+  ) {
+    const mailOptions = {
+      from: '"Sistema de Otorgamiento" <no-reply@otorgamiento.com>',
+      to,
+      subject,
+      text,
+      html: html || text.replace(/\n/g, '<br>'),
     };
     await this.transporter.sendMail(mailOptions);
   }

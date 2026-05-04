@@ -5,7 +5,7 @@ import { PeriodoOtorgamientoModule } from '../periodo/periodo.module';
 import { NinosModule } from '../nino/nino.module';
 import { TrazabilidadModule } from '../trazabilidad/trazabilidad.module';
 import { ValidacionIdentidadModule } from '../validacion-ficha-unica/validacion-ficha-unica.module';
-import { PriorityModule } from '../prioridades/prioridad.module';
+import { PriorityModule } from '../../common/prioridades/prioridad.module';
 
 @Module({
   imports: [
