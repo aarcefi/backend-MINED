@@ -39,4 +39,8 @@ export class CreateCirculoInfantilDto {
   @ApiProperty()
   @IsBoolean()
   activo: boolean;
+
+  @ApiProperty()
+  @IsBoolean()
+  tieneSextoAnio: boolean;
 }

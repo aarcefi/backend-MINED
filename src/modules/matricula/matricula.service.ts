@@ -20,9 +20,10 @@ export class MatriculasService {
   ) {}
 
   async create(createMatriculaDto: CreateMatriculaDto) {
-    // Verificar que la solicitud existe
+    // Verificar que la solicitud existe y obtener el año solicitado
     const solicitud = await this.prisma.solicitud.findUnique({
       where: { id: createMatriculaDto.solicitudId },
+      include: { periodo: true }, // periodo necesario para buscar capacidad
     });
 
     if (!solicitud) {
@@ -42,6 +43,13 @@ export class MatriculasService {
       );
     }
 
+    // 🔥 Validar que el círculo ofrezca el año de vida solicitado (especialmente sexto año)
+    if (!circulo.tieneSextoAnio && solicitud.anioSolicitado === 'ANIO_6') {
+      throw new ConflictException(
+        'Este círculo no ofrece el sexto año de vida',
+      );
+    }
+
     // Verificar que la solicitud no tenga ya una matrícula
     const matriculaExistente = await this.prisma.matricula.findUnique({
       where: { solicitudId: createMatriculaDto.solicitudId },
@@ -53,26 +61,27 @@ export class MatriculasService {
       );
     }
 
-    // Verificar que el círculo tenga capacidad disponible
+    // 🔥 Buscar la capacidad específica por círculo, período y año de vida
     const capacidad = await this.prisma.capacidadCirculo.findUnique({
       where: {
-        circuloId_periodoId: {
+        circuloId_periodoId_anioVida: {
           circuloId: createMatriculaDto.circuloId,
           periodoId: solicitud.periodoId,
+          anioVida: solicitud.anioSolicitado,
         },
       },
     });
 
     if (!capacidad || capacidad.cuposDisponibles <= 0) {
       throw new ConflictException(
-        'El círculo no tiene capacidad disponible para este período',
+        `No hay cupos disponibles para el año ${solicitud.anioSolicitado} en este círculo`,
       );
     }
 
     // Generar folio único
     const folio = await this.generarFolioUnico();
 
-    // Crear la matrícula y actualizar la capacidad
+    // Crear la matrícula y actualizar la capacidad (solo la del año específico)
     const [matricula] = await this.prisma.$transaction([
       this.prisma.matricula.create({
         data: {
@@ -102,10 +111,7 @@ export class MatriculasService {
       }),
       this.prisma.capacidadCirculo.update({
         where: {
-          circuloId_periodoId: {
-            circuloId: createMatriculaDto.circuloId,
-            periodoId: solicitud.periodoId,
-          },
+          id: capacidad.id,
         },
         data: {
           cuposOcupados: { increment: 1 },
@@ -114,10 +120,9 @@ export class MatriculasService {
       }),
     ]);
 
-    // Disparar evento para notificaciones y correo
-    // Obtener datos del solicitante a partir de la solicitud
+    // Disparar evento para notificaciones y correo (sin cambios)
     const solicitante = matricula.solicitud.solicitante;
-    const usuario = solicitante.usuario; // Asumiendo que el solicitante tiene relación 'usuario'
+    const usuario = solicitante.usuario;
 
     if (usuario) {
       const evento = new MatriculaCreadaEvent({
@@ -446,6 +451,7 @@ export class MatriculasService {
   async update(id: string, data: UpdateMatriculaDto) {
     const matricula = await this.prisma.matricula.findUnique({
       where: { id },
+      include: { solicitud: true },
     });
 
     if (!matricula) {
@@ -457,16 +463,19 @@ export class MatriculasService {
       data.estado === EstadoMatricula.CANCELADA &&
       matricula.estado !== EstadoMatricula.CANCELADA
     ) {
+      // Obtener la solicitud para conocer el año y período
       const solicitud = await this.prisma.solicitud.findUnique({
         where: { id: matricula.solicitudId },
+        select: { anioSolicitado: true, periodoId: true },
       });
 
       if (solicitud) {
         await this.prisma.capacidadCirculo.update({
           where: {
-            circuloId_periodoId: {
+            circuloId_periodoId_anioVida: {
               circuloId: matricula.circuloId,
               periodoId: solicitud.periodoId,
+              anioVida: solicitud.anioSolicitado,
             },
           },
           data: {
@@ -495,6 +504,7 @@ export class MatriculasService {
           include: {
             nino: true,
             periodo: true,
+            solicitante: { include: { usuario: true } },
           },
         },
         circulo: true,
@@ -506,13 +516,14 @@ export class MatriculasService {
   async remove(id: string) {
     const matricula = await this.prisma.matricula.findUnique({
       where: { id },
+      include: { solicitud: true },
     });
 
     if (!matricula) {
       throw new NotFoundException(`Matrícula con ID ${id} no encontrada`);
     }
 
-    // Verificar que no tenga controles trimestrales
+    // Verificar que no tenga controles trimestrales asociados
     const controlesCount = await this.prisma.controlTrimestral.count({
       where: { matriculaId: id },
     });
@@ -527,14 +538,16 @@ export class MatriculasService {
     if (matricula.estado === EstadoMatricula.ACTIVA) {
       const solicitud = await this.prisma.solicitud.findUnique({
         where: { id: matricula.solicitudId },
+        select: { anioSolicitado: true, periodoId: true },
       });
 
       if (solicitud) {
         await this.prisma.capacidadCirculo.update({
           where: {
-            circuloId_periodoId: {
+            circuloId_periodoId_anioVida: {
               circuloId: matricula.circuloId,
               periodoId: solicitud.periodoId,
+              anioVida: solicitud.anioSolicitado,
             },
           },
           data: {

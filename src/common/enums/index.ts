@@ -8,3 +8,4 @@ export * from './tipo-circulo.enum';
 export * from './resultado-decision.enum';
 export * from './estado-matricula.enum';
 export * from './rol-usuario';
+export * from './anio-vida.enum';

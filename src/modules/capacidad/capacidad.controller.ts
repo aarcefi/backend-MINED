@@ -83,24 +83,6 @@ export class CapacidadCirculoController {
     });
   }
 
-  @Get('disponibles')
-  @Roles(
-    RolUsuario.ADMINISTRADOR,
-    RolUsuario.FUNCIONARIO_MUNICIPAL,
-    RolUsuario.COMISION_OTORGAMIENTO,
-    RolUsuario.SOLICITANTE,
-  )
-  @ApiOperation({ summary: 'Obtener capacidades con cupos disponibles' })
-  @ApiQuery({
-    name: 'circuloId',
-    required: false,
-    description: 'Filtrar por círculo',
-  })
-  @ApiResponse({ status: 200, description: 'Lista de capacidades disponibles' })
-  findDisponibles(@Query('circuloId') circuloId?: string) {
-    return this.capacidadService.findConCuposDisponibles(circuloId);
-  }
-
   @Get('estadisticas')
   @Roles(RolUsuario.ADMINISTRADOR, RolUsuario.FUNCIONARIO_MUNICIPAL)
   @ApiOperation({ summary: 'Obtener estadísticas de capacidades' })

@@ -10,7 +10,9 @@ export class CirculoInfantilService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(data: CreateCirculoInfantilDto) {
-    return this.prisma.circuloInfantil.create({ data });
+    return this.prisma.circuloInfantil.create({
+      data: { ...data, tieneSextoAnio: data.tieneSextoAnio ?? false },
+    });
   }
 
   async findAll(filtros?: {
@@ -198,22 +200,25 @@ export class CirculoInfantilService {
     const circulo = await this.prisma.circuloInfantil.findUnique({
       where: { id },
       include: {
-        capacidades: {
-          include: {
-            periodo: true,
-          },
-        },
-        matriculas: {
-          include: {
-            solicitud: true,
-          },
-        },
+        capacidades: { include: { periodo: true } },
+        matriculas: { include: { solicitud: true } },
       },
     });
-
-    if (!circulo) {
+    if (!circulo)
       throw new NotFoundException(`Círculo con ID ${id} no encontrado`);
-    }
+
+    const capacidadPorAnio = circulo.capacidades.reduce(
+      (acc, cap) => {
+        acc[cap.anioVida] =
+          (acc[cap.anioVida] || 0) + cap.cuposDisponibles + cap.cuposOcupados;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+    const capacidadTotal = Object.values(capacidadPorAnio).reduce(
+      (a, b) => a + b,
+      0,
+    );
 
     const matriculasActivas = circulo.matriculas.filter(
       (m) => m.estado === 'ACTIVA',
@@ -228,10 +233,6 @@ export class CirculoInfantilService {
     // Calcular ocupación actual
     const capacidadActual = circulo.capacidades.reduce(
       (acc, cap) => acc + cap.cuposOcupados,
-      0,
-    );
-    const capacidadTotal = circulo.capacidades.reduce(
-      (acc, cap) => acc + cap.cuposDisponibles + cap.cuposOcupados,
       0,
     );
 
@@ -255,18 +256,14 @@ export class CirculoInfantilService {
   }
 
   async update(id: string, data: UpdateCirculoInfantilDto) {
-    // Verificar que existe
     const circulo = await this.prisma.circuloInfantil.findUnique({
       where: { id },
     });
-
-    if (!circulo) {
+    if (!circulo)
       throw new NotFoundException(`Círculo con ID ${id} no encontrado`);
-    }
-
     return this.prisma.circuloInfantil.update({
       where: { id },
-      data,
+      data: { ...data, tieneSextoAnio: data.tieneSextoAnio },
     });
   }
 

@@ -4,6 +4,7 @@ import {
   TipoSolicitud,
   EstadoSolicitud,
 } from '@prisma/client';
+import { AnioVida } from 'src/common';
 
 export class SolicitudListResponseDto {
   @ApiProperty()
@@ -11,6 +12,9 @@ export class SolicitudListResponseDto {
 
   @ApiProperty()
   fechaSolicitud: Date;
+
+  @ApiProperty({ enum: AnioVida })
+  anioVida: AnioVida;
 
   @ApiProperty({ enum: SectorPrioridad })
   sector: SectorPrioridad;

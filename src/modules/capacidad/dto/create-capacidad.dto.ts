@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsUUID, IsInt, Min } from 'class-validator';
+import { IsUUID, IsInt, Min, IsEnum } from 'class-validator';
+import { AnioVida } from 'src/common';
 
 export class CreateCapacidadDto {
   @ApiProperty()
@@ -9,6 +10,10 @@ export class CreateCapacidadDto {
   @ApiProperty()
   @IsUUID()
   periodoId: string;
+
+  @ApiProperty({ enum: AnioVida })
+  @IsEnum(AnioVida)
+  anioVida: AnioVida;
 
   @ApiProperty()
   @IsInt()

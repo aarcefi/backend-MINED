@@ -61,6 +61,15 @@ enum TipoCirculo {
   MIXTO
 }
 
+enum AnioVida {
+  ANIO_1
+  ANIO_2
+  ANIO_3
+  ANIO_4
+  ANIO_5
+  ANIO_6
+}
+
 enum ResultadoDecision {
   ACEPTADA
   DENEGADA
@@ -205,6 +214,7 @@ model CirculoInfantil {
   tipo            TipoCirculo
   activo          Boolean            @default(true)
   telefono        String?
+  tieneSextoAnio  Boolean            @default(false)
 
   // Relaciones
   capacidades     CapacidadCirculo[]
@@ -233,26 +243,27 @@ model PeriodoOtorgamiento {
 
 // Tabla: capacidad_circulo
 model CapacidadCirculo {
-  id              String           @id @default(uuid()) @db.Uuid
-  circuloId       String           @db.Uuid
-  periodoId       String           @db.Uuid
+  id              String   @id @default(uuid()) @db.Uuid
+  circuloId       String   @db.Uuid
+  periodoId       String   @db.Uuid
+  anioVida        AnioVida @default(ANIO_1)
   cuposDisponibles Int
   cuposOcupados   Int
 
-  // Relaciones
-  circulo         CirculoInfantil  @relation(fields: [circuloId], references: [id], onDelete: Cascade)
+  circulo         CirculoInfantil     @relation(fields: [circuloId], references: [id], onDelete: Cascade)
   periodo         PeriodoOtorgamiento @relation(fields: [periodoId], references: [id], onDelete: Cascade)
 
-  @@unique([circuloId, periodoId])
+  @@unique([circuloId, periodoId, anioVida])
   @@map("capacidades_circulos")
 }
 
-// Tabla:   tud
+// Tabla: solicitud
 model Solicitud {
   id              String             @id @default(uuid()) @db.Uuid
   ninoId          String             @unique @db.Uuid
   solicitanteId   String             @db.Uuid
-  fechaSolicitud  DateTime           @default(now()) @db.Timestamp  
+  fechaSolicitud  DateTime           @default(now()) @db.Timestamp 
+  anioSolicitado  AnioVida           @default(ANIO_1) 
   sector          SectorPrioridad
   tipoSolicitud   TipoSolicitud
   estado          EstadoSolicitud    @default(EN_REVISION)

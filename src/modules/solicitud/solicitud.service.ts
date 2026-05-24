@@ -33,6 +33,10 @@ import {
 } from '../../common/prioridades/index';
 import { EventDispatcher } from '../../common/events/event-dispatcher.service';
 import { SolicitudEstadoChangedEvent } from './events/solicitud-estado-changed.event';
+import {
+  DateUtilsService,
+  AnioVida,
+} from '../../common/utils/date-utils.service';
 
 @Injectable()
 export class SolicitudService {
@@ -45,6 +49,7 @@ export class SolicitudService {
     private validacionFichaUnica: ValidacionIdentidadService,
     private priorityCalculator: PriorityCalculator,
     private eventDispatcher: EventDispatcher,
+    private dateUtils: DateUtilsService,
   ) {}
 
   async create(
@@ -79,14 +84,12 @@ export class SolicitudService {
       await this.validacionFichaUnica.verificarCarnetIdentidad(
         data.nino.tarjetaMenor,
       );
-      // Crear nuevo niño usando NinosService
       const createNinoDto: CreateNinoDto = {
         ...data.nino,
         solicitanteId: data.solicitanteId,
       };
       nino = await this.ninosService.create(createNinoDto);
     } else {
-      // Verificar que pertenezca al mismo solicitante
       if (nino.solicitanteId !== data.solicitanteId) {
         throw new ConflictException(
           'El niño ya está registrado con otro solicitante',
@@ -108,6 +111,18 @@ export class SolicitudService {
       );
     }
 
+    // 🔥 Calcular año de vida del niño según fecha de nacimiento y fecha actual
+    const anioVida = this.dateUtils.calcularAnioVida(
+      nino.fechaNacimiento,
+      fechaActual,
+    );
+    if (!anioVida) {
+      throw new BadRequestException(
+        'El niño debe tener entre 1 y 6 años de edad para solicitar una plaza',
+      );
+    }
+
+    // Calcular prioridad usando el PriorityCalculator
     const context: PriorityContext = {
       sector: data.sector,
       tipoSolicitud: data.tipoSolicitud,
@@ -121,7 +136,7 @@ export class SolicitudService {
     };
     const prioridad = this.priorityCalculator.calculatePriority(context);
 
-    // Crear solicitud
+    // Crear solicitud (incluyendo anioSolicitado)
     const solicitud = await this.prisma.solicitud.create({
       data: {
         ninoId: nino.id,
@@ -133,6 +148,7 @@ export class SolicitudService {
         periodoId: periodoActivo.id,
         observaciones: data.observaciones,
         prioridad,
+        anioSolicitado: anioVida,
       },
       include: {
         nino: true,
@@ -732,6 +748,7 @@ export class SolicitudService {
     return {
       id: solicitud.id,
       fechaSolicitud: solicitud.fechaSolicitud,
+      anioVida: solicitud.anioSolicitado,
       sector: solicitud.sector,
       tipoSolicitud: solicitud.tipoSolicitud,
       estado: solicitud.estado,
