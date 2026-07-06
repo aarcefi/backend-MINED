@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Query,
   UseGuards,
+  Request,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -151,8 +152,11 @@ export class NotificacionesController {
     status: 200,
     description: 'Lista de notificaciones del usuario',
   })
-  findMisNotificaciones(@Query('usuarioId') usuarioId: string) {
-    return this.notificacionesService.findAllByUsuario(usuarioId);
+  findMisNotificaciones(
+    @Request() req,
+    @Query('usuarioId') usuarioId?: string,
+  ) {
+    return this.notificacionesService.findAllByUsuario(usuarioId || req.user.id);
   }
 
   @Get('mis-notificaciones/no-leidas')
@@ -170,8 +174,25 @@ export class NotificacionesController {
     status: 200,
     description: 'Lista de notificaciones no leídas',
   })
-  findMisNotificacionesNoLeidas(@Query('usuarioId') usuarioId: string) {
-    return this.notificacionesService.findUnreadByUsuario(usuarioId);
+  findMisNotificacionesNoLeidas(
+    @Request() req,
+    @Query('usuarioId') usuarioId?: string,
+  ) {
+    return this.notificacionesService.findUnreadByUsuario(
+      usuarioId || req.user.id,
+    );
+  }
+
+  @Patch('mis-notificaciones/marcar-todas-leidas')
+  @Roles(
+    RolUsuario.ADMINISTRADOR,
+    RolUsuario.FUNCIONARIO_MUNICIPAL,
+    RolUsuario.COMISION_OTORGAMIENTO,
+    RolUsuario.DIRECTOR_CIRCULO,
+    RolUsuario.SOLICITANTE,
+  )
+  marcarMisNotificacionesComoLeidas(@Request() req) {
+    return this.notificacionesService.markAllAsRead(req.user.id);
   }
 
   @Get('usuario/:usuarioId')

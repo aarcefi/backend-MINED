@@ -121,6 +121,7 @@ model Usuario {
 
   // Relación con Notificaciones
   notificaciones  Notificacion[]
+  trasladosRespondidos TrasladoSolicitud[] @relation("traslado_respondido_por")
 
     trazas          Trazabilidad[]
 
@@ -140,6 +141,7 @@ model PerfilSolicitante {
   usuario         Usuario             @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
   hijos           Nino[]
   solicitudes     Solicitud[]
+  traslados       TrasladoSolicitud[]
 
   @@map("perfiles_solicitantes")
 }
@@ -199,6 +201,7 @@ model Nino {
   // Relaciones
   solicitante     PerfilSolicitante   @relation(fields: [solicitanteId], references: [id], onDelete: Cascade)
   solicitud       Solicitud?
+  traslados       TrasladoSolicitud[]
 
   @@map("ninos")
 }
@@ -220,6 +223,8 @@ model CirculoInfantil {
   capacidades     CapacidadCirculo[]
   matriculas      Matricula[]
   director        PerfilDirector?    @relation("director_circulo")
+  trasladosOrigen  TrasladoSolicitud[] @relation("traslado_circulo_origen")
+  trasladosDestino TrasladoSolicitud[] @relation("traslado_circulo_destino")
 
   @@map("circulos_infantiles")
 }
@@ -349,6 +354,7 @@ model Matricula {
   solicitud       Solicitud       @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
   circulo         CirculoInfantil @relation(fields: [circuloId], references: [id], onDelete: Cascade)
   controles       ControlTrimestral[]
+  traslados       TrasladoSolicitud[]
 
   @@map("matriculas")
 }
@@ -370,6 +376,35 @@ model ControlTrimestral {
 }
 
 // Tabla: trazabilidad
+model TrasladoSolicitud {
+  id                    String          @id @default(uuid()) @db.Uuid
+  solicitanteId         String          @db.Uuid
+  ninoId                String          @db.Uuid
+  matriculaId           String          @db.Uuid
+  circuloOrigenId       String          @db.Uuid
+  circuloDestinoId      String          @db.Uuid
+  motivo                String
+  estado                EstadoSolicitud @default(EN_REVISION)
+  fechaSolicitud        DateTime        @default(now()) @db.Timestamp
+  fechaRespuesta        DateTime?       @db.Timestamp
+  comentarioRespuesta  String?
+  respondidoPorId       String?         @db.Uuid
+  createdAt             DateTime        @default(now()) @db.Timestamp
+  updatedAt             DateTime        @updatedAt @db.Timestamp
+
+  solicitante   PerfilSolicitante @relation(fields: [solicitanteId], references: [id], onDelete: Cascade)
+  nino          Nino              @relation(fields: [ninoId], references: [id], onDelete: Cascade)
+  matricula     Matricula         @relation(fields: [matriculaId], references: [id], onDelete: Cascade)
+  circuloOrigen CirculoInfantil   @relation("traslado_circulo_origen", fields: [circuloOrigenId], references: [id], onDelete: Restrict)
+  circuloDestino CirculoInfantil  @relation("traslado_circulo_destino", fields: [circuloDestinoId], references: [id], onDelete: Restrict)
+  respondidoPor Usuario?          @relation("traslado_respondido_por", fields: [respondidoPorId], references: [id], onDelete: SetNull)
+
+  @@index([solicitanteId])
+  @@index([matriculaId])
+  @@index([estado])
+  @@map("traslados_solicitud")
+}
+
 model Trazabilidad {
   id              String      @id @default(uuid()) @db.Uuid
   solicitudId     String      @db.Uuid

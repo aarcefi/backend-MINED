@@ -4,7 +4,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { APP_GUARD } from '@nestjs/core';
 import { AuthModule } from '../src/auth/auth.module';
 import { JwtAuthGuard } from '../src/auth/guards/jwt-auth.guard';
-import { EnumsModule, NinosModule } from './modules/index';
+import { EnumsModule, NinosModule, TrasladoModule } from './modules/index';
 import { SolicitudModule } from './modules/index';
 import { DocumentoModule } from './modules/index';
 import { CirculoInfantilModule } from './modules/index';
@@ -48,6 +48,7 @@ import jwtConfig from './config/jwt.config';
     MatriculasModule,
     ControlTrimestralModule,
     TrazabilidadModule,
+    TrasladoModule,
   ],
   providers: [
     {

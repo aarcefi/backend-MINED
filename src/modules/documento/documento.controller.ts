@@ -8,6 +8,7 @@ import {
   Delete,
   ParseUUIDPipe,
   Query,
+  Request,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -192,11 +193,26 @@ export class DocumentoController {
   @ApiResponse({ status: 200, description: 'Documento validado' })
   @ApiResponse({ status: 404, description: 'Documento no encontrado' })
   validarDocumento(
+    @Request() req,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body('validado') validado: boolean,
-    @Body('validadorId') validadorId: string,
+    @Body('validado') validado?: boolean,
+    @Body('validadorId') validadorId?: string,
   ) {
-    return this.documentoService.validarDocumento(id, validado, validadorId);
+    return this.documentoService.validarDocumento(
+      id,
+      validado ?? true,
+      validadorId || req.user.perfilId,
+    );
+  }
+
+  @Patch(':id/rechazar-validacion')
+  @Roles(RolUsuario.FUNCIONARIO_MUNICIPAL)
+  @ApiOperation({ summary: 'Rechazar la validación de un documento' })
+  rechazarValidacion(
+    @Request() req,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.documentoService.validarDocumento(id, false, req.user.perfilId);
   }
 
   @Delete(':id')

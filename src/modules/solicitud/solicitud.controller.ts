@@ -129,7 +129,7 @@ export class SolicitudController {
   })
   findAll(
     @Request() req,
-    @Query('estado') estado?: EstadoSolicitud,
+    @Query('estado') estado?: EstadoSolicitud | 'APROBADA' | 'RECHAZADA',
     @Query('sector') sector?: SectorPrioridad,
     @Query('tipoSolicitud') tipoSolicitud?: TipoSolicitud,
     @Query('periodoId') periodoId?: string,
@@ -152,9 +152,16 @@ export class SolicitudController {
       municipio = req.user.perfil.municipio;
     }
 
+    const estadoNormalizado =
+      estado === 'APROBADA'
+        ? EstadoSolicitud.APROBADA_DIRECCION
+        : estado === 'RECHAZADA'
+          ? EstadoSolicitud.RECHAZADA_DIRECCION
+          : estado;
+
     return this.solicitudService.findAll(
       {
-        estado,
+        estado: estadoNormalizado,
         sector,
         tipoSolicitud,
         periodoId,
@@ -180,12 +187,15 @@ export class SolicitudController {
     description: 'Lista de solicitudes pendientes de revisión',
     type: [SolicitudListResponseDto],
   })
-  findPendientesRevision(@Request() req) {
+  findPendientesRevision(
+    @Request() req,
+    @Query('municipio') municipioQuery?: string,
+  ) {
     // Filtrar por municipio si es director de círculo
     const municipio =
       req.user.rol === RolUsuario.DIRECTOR_CIRCULO
         ? req.user.perfil?.municipio
-        : undefined;
+        : municipioQuery || req.user.municipio;
 
     return this.solicitudService.findPendientesRevision(municipio);
   }
@@ -363,15 +373,26 @@ export class SolicitudController {
   cambiarEstado(
     @Request() req,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body('estado') estado: EstadoSolicitud,
+    @Body('estado') estado: EstadoSolicitud | 'APROBADA' | 'RECHAZADA',
     @Body('comentario') comentario?: string,
   ) {
     if (!estado) {
       throw new BadRequestException('El campo "estado" es requerido');
     }
+    const estadoNormalizado =
+      estado === 'APROBADA'
+        ? req.user.rol === RolUsuario.COMISION_OTORGAMIENTO
+          ? EstadoSolicitud.APROBADA_COMISION
+          : EstadoSolicitud.APROBADA_DIRECCION
+        : estado === 'RECHAZADA'
+          ? req.user.rol === RolUsuario.COMISION_OTORGAMIENTO
+            ? EstadoSolicitud.RECHAZADA_COMISION
+            : EstadoSolicitud.RECHAZADA_DIRECCION
+          : estado;
+
     return this.solicitudService.cambiarEstado(
       id,
-      estado,
+      estadoNormalizado,
       req.user,
       comentario,
     );

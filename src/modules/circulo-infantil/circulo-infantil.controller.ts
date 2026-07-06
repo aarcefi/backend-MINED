@@ -48,6 +48,7 @@ export class CirculoInfantilController {
     RolUsuario.FUNCIONARIO_MUNICIPAL,
     RolUsuario.COMISION_OTORGAMIENTO,
     RolUsuario.SOLICITANTE,
+    RolUsuario.DIRECTOR_CIRCULO,
   )
   @ApiOperation({ summary: 'Obtener todos los círculos infantiles' })
   @ApiQuery({
@@ -120,6 +121,7 @@ export class CirculoInfantilController {
     RolUsuario.FUNCIONARIO_MUNICIPAL,
     RolUsuario.COMISION_OTORGAMIENTO,
     RolUsuario.SOLICITANTE,
+    RolUsuario.DIRECTOR_CIRCULO,
   )
   @ApiOperation({ summary: 'Obtener círculo infantil por ID' })
   @ApiParam({ name: 'id', description: 'ID del círculo infantil' })
@@ -134,6 +136,7 @@ export class CirculoInfantilController {
     RolUsuario.ADMINISTRADOR,
     RolUsuario.FUNCIONARIO_MUNICIPAL,
     RolUsuario.COMISION_OTORGAMIENTO,
+    RolUsuario.DIRECTOR_CIRCULO,
   )
   @ApiOperation({ summary: 'Obtener capacidades de un círculo' })
   @ApiParam({ name: 'id', description: 'ID del círculo infantil' })

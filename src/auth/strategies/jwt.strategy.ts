@@ -35,6 +35,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         perfilSolicitante: true,
         perfilFuncionario: true,
         perfilComision: true,
+        perfilDirector: {
+          include: { circulo: true },
+        },
       },
     });
 
@@ -60,12 +63,20 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     } else if (user.perfilComision) {
       perfilId = user.perfilComision.id;
       perfil = user.perfilComision;
+    } else if (user.perfilDirector) {
+      perfilId = user.perfilDirector.id;
+      perfil = {
+        ...user.perfilDirector,
+        municipio: user.perfilDirector.circulo.municipio,
+        circulo: user.perfilDirector.circulo,
+      };
     }
 
     return {
       id: user.id,
       email: user.email,
       rol: user.rol,
+      municipio: user.municipio,
       perfilId,
       perfil,
     };
