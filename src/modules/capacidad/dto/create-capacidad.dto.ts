@@ -7,10 +7,6 @@ export class CreateCapacidadDto {
   @IsUUID()
   circuloId: string;
 
-  @ApiProperty()
-  @IsUUID()
-  periodoId: string;
-
   @ApiProperty({ enum: AnioVida })
   @IsEnum(AnioVida)
   anioVida: AnioVida;

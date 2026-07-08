@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-enum-comparison */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import {
@@ -29,31 +30,21 @@ export class CapacidadCirculoService {
 
     const capacidadExistente = await this.prisma.capacidadCirculo.findUnique({
       where: {
-        circuloId_periodoId_anioVida: {
+        circuloId_anioVida: {
           circuloId: data.circuloId,
-          periodoId: data.periodoId,
           anioVida: data.anioVida,
         },
       },
     });
     if (capacidadExistente) {
       throw new BadRequestException(
-        'Ya existe una capacidad para este círculo, período y año de vida',
+        'Ya existe una capacidad para este círculo y año de vida',
       );
     }
-
-    const periodo = await this.prisma.periodoOtorgamiento.findUnique({
-      where: { id: data.periodoId },
-    });
-    if (!periodo)
-      throw new NotFoundException(
-        `Período con ID ${data.periodoId} no encontrado`,
-      );
 
     return this.prisma.capacidadCirculo.create({
       data: {
         circuloId: data.circuloId,
-        periodoId: data.periodoId,
         anioVida: data.anioVida,
         cuposDisponibles: data.cuposDisponibles,
         cuposOcupados: data.cuposOcupados,
@@ -63,19 +54,17 @@ export class CapacidadCirculoService {
 
   async findAll(filtros?: {
     circuloId?: string;
-    periodoId?: string;
     anioVida?: AnioVida;
     cuposDisponiblesMin?: number;
   }) {
     const where: any = {};
     if (filtros?.circuloId) where.circuloId = filtros.circuloId;
-    if (filtros?.periodoId) where.periodoId = filtros.periodoId;
     if (filtros?.anioVida) where.anioVida = filtros.anioVida;
     if (filtros?.cuposDisponiblesMin !== undefined)
       where.cuposDisponibles = { gte: filtros.cuposDisponiblesMin };
     return this.prisma.capacidadCirculo.findMany({
       where,
-      include: { circulo: true, periodo: true },
+      include: { circulo: true },
       orderBy: [{ circuloId: 'asc' }, { anioVida: 'asc' }],
     });
   }
@@ -83,31 +72,15 @@ export class CapacidadCirculoService {
   async findOne(id: string) {
     return this.prisma.capacidadCirculo.findUnique({
       where: { id },
-      include: { circulo: true, periodo: true },
+      include: { circulo: true },
     });
   }
 
   async findByCirculoId(circuloId: string) {
     return this.prisma.capacidadCirculo.findMany({
       where: { circuloId },
-      include: { periodo: true },
+      include: { circulo: true },
       orderBy: { anioVida: 'asc' },
-    });
-  }
-
-  async findByPeriodoId(periodoId: string) {
-    return this.prisma.capacidadCirculo.findMany({
-      where: { periodoId },
-      include: { circulo: true },
-      orderBy: [{ circuloId: 'asc' }, { anioVida: 'asc' }],
-    });
-  }
-
-  async findDisponiblesByPeriodo(periodoId: string) {
-    return this.prisma.capacidadCirculo.findMany({
-      where: { periodoId, cuposDisponibles: { gt: 0 } },
-      include: { circulo: true },
-      orderBy: { cuposDisponibles: 'desc' },
     });
   }
 
@@ -117,6 +90,22 @@ export class CapacidadCirculoService {
     });
     if (!capacidad)
       throw new NotFoundException(`Capacidad con ID ${id} no encontrada`);
+    // Si se cambia el año, validar que no exista conflicto con otro registro
+    if (data.anioVida && data.anioVida !== capacidad.anioVida) {
+      const existente = await this.prisma.capacidadCirculo.findUnique({
+        where: {
+          circuloId_anioVida: {
+            circuloId: capacidad.circuloId,
+            anioVida: data.anioVida,
+          },
+        },
+      });
+      if (existente && existente.id !== id) {
+        throw new BadRequestException(
+          'Ya existe una capacidad para este círculo y año de vida',
+        );
+      }
+    }
     return this.prisma.capacidadCirculo.update({ where: { id }, data });
   }
 

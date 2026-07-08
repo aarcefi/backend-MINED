@@ -20,10 +20,9 @@ export class MatriculasService {
   ) {}
 
   async create(createMatriculaDto: CreateMatriculaDto) {
-    // Verificar que la solicitud existe y obtener el año solicitado
+    // Verificar que la solicitud existe
     const solicitud = await this.prisma.solicitud.findUnique({
       where: { id: createMatriculaDto.solicitudId },
-      include: { periodo: true }, // periodo necesario para buscar capacidad
     });
 
     if (!solicitud) {
@@ -43,7 +42,7 @@ export class MatriculasService {
       );
     }
 
-    // 🔥 Validar que el círculo ofrezca el año de vida solicitado (especialmente sexto año)
+    // Validar que el círculo ofrezca el año de vida solicitado
     if (!circulo.tieneSextoAnio && solicitud.anioSolicitado === 'ANIO_6') {
       throw new ConflictException(
         'Este círculo no ofrece el sexto año de vida',
@@ -61,12 +60,11 @@ export class MatriculasService {
       );
     }
 
-    // 🔥 Buscar la capacidad específica por círculo, período y año de vida
+    // Buscar capacidad por círculo y año de vida (sin período)
     const capacidad = await this.prisma.capacidadCirculo.findUnique({
       where: {
-        circuloId_periodoId_anioVida: {
+        circuloId_anioVida: {
           circuloId: createMatriculaDto.circuloId,
-          periodoId: solicitud.periodoId,
           anioVida: solicitud.anioSolicitado,
         },
       },
@@ -81,7 +79,7 @@ export class MatriculasService {
     // Generar folio único
     const folio = await this.generarFolioUnico();
 
-    // Crear la matrícula y actualizar la capacidad (solo la del año específico)
+    // Crear la matrícula y actualizar la capacidad
     const [matricula] = await this.prisma.$transaction([
       this.prisma.matricula.create({
         data: {
@@ -110,9 +108,7 @@ export class MatriculasService {
         },
       }),
       this.prisma.capacidadCirculo.update({
-        where: {
-          id: capacidad.id,
-        },
+        where: { id: capacidad.id },
         data: {
           cuposOcupados: { increment: 1 },
           cuposDisponibles: { decrement: 1 },
@@ -120,7 +116,7 @@ export class MatriculasService {
       }),
     ]);
 
-    // Disparar evento para notificaciones y correo (sin cambios)
+    // Disparar evento para notificaciones y correo
     const solicitante = matricula.solicitud.solicitante;
     const usuario = solicitante.usuario;
 
@@ -142,7 +138,6 @@ export class MatriculasService {
   }
 
   private async generarFolioUnico(): Promise<string> {
-    // Generar un folio con formato: MAT-YYYYMMDD-XXXX
     const fecha = new Date();
     const year = fecha.getFullYear();
     const month = String(fecha.getMonth() + 1).padStart(2, '0');
@@ -154,24 +149,17 @@ export class MatriculasService {
     let folio = `MAT-${year}${month}${day}-${random}`;
     let intentos = 0;
 
-    // Verificar que el folio no exista
     while (intentos < 10) {
       const existe = await this.prisma.matricula.findUnique({
         where: { folio },
       });
-
-      if (!existe) {
-        return folio;
-      }
-
-      // Si existe, generar otro
+      if (!existe) return folio;
       const newRandom = Math.floor(Math.random() * 10000)
         .toString()
         .padStart(4, '0');
       folio = `MAT-${year}${month}${day}-${newRandom}`;
       intentos++;
     }
-
     throw new Error('No se pudo generar un folio único después de 10 intentos');
   }
 
@@ -184,39 +172,23 @@ export class MatriculasService {
     fechaOtorgamientoHasta?: Date;
   }) {
     const where: any = {};
-
-    if (filtros?.estado) {
-      where.estado = filtros.estado;
-    }
-
-    if (filtros?.circuloId) {
-      where.circuloId = filtros.circuloId;
-    }
-
+    if (filtros?.estado) where.estado = filtros.estado;
+    if (filtros?.circuloId) where.circuloId = filtros.circuloId;
     if (filtros?.periodoId) {
-      where.solicitud = {
-        ...where.solicitud,
-        periodoId: filtros.periodoId,
-      };
+      where.solicitud = { ...where.solicitud, periodoId: filtros.periodoId };
     }
-
     if (filtros?.solicitanteId) {
       where.solicitud = {
         ...where.solicitud,
         solicitanteId: filtros.solicitanteId,
       };
     }
-
     if (filtros?.fechaOtorgamientoDesde || filtros?.fechaOtorgamientoHasta) {
       where.fechaOtorgamiento = {};
-
-      if (filtros.fechaOtorgamientoDesde) {
+      if (filtros.fechaOtorgamientoDesde)
         where.fechaOtorgamiento.gte = filtros.fechaOtorgamientoDesde;
-      }
-
-      if (filtros.fechaOtorgamientoHasta) {
+      if (filtros.fechaOtorgamientoHasta)
         where.fechaOtorgamiento.lte = filtros.fechaOtorgamientoHasta;
-      }
     }
 
     return this.prisma.matricula.findMany({
@@ -224,25 +196,14 @@ export class MatriculasService {
       include: {
         solicitud: {
           include: {
-            nino: {
-              include: {
-                solicitante: true,
-              },
-            },
+            nino: { include: { solicitante: true } },
             periodo: true,
           },
         },
         circulo: true,
-        controles: {
-          orderBy: {
-            fecha: 'desc',
-          },
-          take: 1,
-        },
+        controles: { orderBy: { fecha: 'desc' }, take: 1 },
       },
-      orderBy: {
-        fechaOtorgamiento: 'desc',
-      },
+      orderBy: { fechaOtorgamiento: 'desc' },
     });
   }
 
@@ -252,38 +213,26 @@ export class MatriculasService {
 
   async findVencidas() {
     const hoy = new Date();
-
-    // Obtener matrículas que están vencidas por fecha límite
     const matriculas = await this.prisma.matricula.findMany({
       where: {
         OR: [
           { estado: EstadoMatricula.VENCIDA },
-          {
-            estado: EstadoMatricula.ACTIVA,
-            fechaLimite: { lt: hoy },
-          },
+          { estado: EstadoMatricula.ACTIVA, fechaLimite: { lt: hoy } },
         ],
       },
       include: {
         solicitud: {
           include: {
-            nino: {
-              include: {
-                solicitante: true,
-              },
-            },
+            nino: { include: { solicitante: true } },
             periodo: true,
           },
         },
         circulo: true,
         controles: true,
       },
-      orderBy: {
-        fechaLimite: 'asc',
-      },
+      orderBy: { fechaLimite: 'asc' },
     });
 
-    // Actualizar estado de matrículas vencidas por fecha
     for (const matricula of matriculas) {
       if (
         matricula.estado === EstadoMatricula.ACTIVA &&
@@ -296,67 +245,37 @@ export class MatriculasService {
         matricula.estado = EstadoMatricula.VENCIDA;
       }
     }
-
     return matriculas;
   }
 
   async findByCirculoId(circuloId: string, estado?: EstadoMatricula) {
     const where: any = { circuloId };
-
-    if (estado) {
-      where.estado = estado;
-    }
-
+    if (estado) where.estado = estado;
     return this.prisma.matricula.findMany({
       where,
       include: {
         solicitud: {
           include: {
-            nino: {
-              include: {
-                solicitante: true,
-              },
-            },
+            nino: { include: { solicitante: true } },
             periodo: true,
           },
         },
         circulo: true,
-        controles: {
-          orderBy: {
-            fecha: 'desc',
-          },
-        },
+        controles: { orderBy: { fecha: 'desc' } },
       },
-      orderBy: {
-        fechaOtorgamiento: 'desc',
-      },
+      orderBy: { fechaOtorgamiento: 'desc' },
     });
   }
 
   async findBySolicitanteId(solicitanteId: string) {
     return this.prisma.matricula.findMany({
-      where: {
-        solicitud: {
-          solicitanteId,
-        },
-      },
+      where: { solicitud: { solicitanteId } },
       include: {
-        solicitud: {
-          include: {
-            nino: true,
-            periodo: true,
-          },
-        },
+        solicitud: { include: { nino: true, periodo: true } },
         circulo: true,
-        controles: {
-          orderBy: {
-            fecha: 'desc',
-          },
-        },
+        controles: { orderBy: { fecha: 'desc' } },
       },
-      orderBy: {
-        fechaOtorgamiento: 'desc',
-      },
+      orderBy: { fechaOtorgamiento: 'desc' },
     });
   }
 
@@ -366,27 +285,16 @@ export class MatriculasService {
       include: {
         solicitud: {
           include: {
-            nino: {
-              include: {
-                solicitante: true,
-              },
-            },
+            nino: { include: { solicitante: true } },
             periodo: true,
           },
         },
         circulo: true,
-        controles: {
-          orderBy: {
-            fecha: 'desc',
-          },
-        },
+        controles: { orderBy: { fecha: 'desc' } },
       },
     });
-
-    if (!matricula) {
+    if (!matricula)
       throw new NotFoundException(`Matrícula con folio ${folio} no encontrada`);
-    }
-
     return matricula;
   }
 
@@ -396,27 +304,16 @@ export class MatriculasService {
       include: {
         solicitud: {
           include: {
-            nino: {
-              include: {
-                solicitante: true,
-              },
-            },
+            nino: { include: { solicitante: true } },
             periodo: true,
           },
         },
         circulo: true,
-        controles: {
-          orderBy: {
-            fecha: 'desc',
-          },
-        },
+        controles: { orderBy: { fecha: 'desc' } },
       },
     });
-
-    if (!matricula) {
+    if (!matricula)
       throw new NotFoundException(`Matrícula con ID ${id} no encontrada`);
-    }
-
     return matricula;
   }
 
@@ -426,11 +323,7 @@ export class MatriculasService {
       include: {
         solicitud: {
           include: {
-            nino: {
-              include: {
-                solicitante: true,
-              },
-            },
+            nino: { include: { solicitante: true } },
             periodo: true,
           },
         },
@@ -438,13 +331,10 @@ export class MatriculasService {
         controles: true,
       },
     });
-
-    if (!matricula) {
+    if (!matricula)
       throw new NotFoundException(
-        `Matrícula para solicitud con ID ${solicitudId} no encontrada`,
+        `Matrícula para solicitud ${solicitudId} no encontrada`,
       );
-    }
-
     return matricula;
   }
 
@@ -453,48 +343,43 @@ export class MatriculasService {
       where: { id },
       include: { solicitud: true },
     });
-
-    if (!matricula) {
+    if (!matricula)
       throw new NotFoundException(`Matrícula con ID ${id} no encontrada`);
-    }
 
-    // Si se cambia el estado a CANCELADA, liberar el cupo
+    // Si se cancela, liberar cupo
     if (
       data.estado === EstadoMatricula.CANCELADA &&
       matricula.estado !== EstadoMatricula.CANCELADA
     ) {
-      // Obtener la solicitud para conocer el año y período
       const solicitud = await this.prisma.solicitud.findUnique({
         where: { id: matricula.solicitudId },
-        select: { anioSolicitado: true, periodoId: true },
+        select: { anioSolicitado: true },
       });
-
       if (solicitud) {
-        await this.prisma.capacidadCirculo.update({
+        const capacidad = await this.prisma.capacidadCirculo.findUnique({
           where: {
-            circuloId_periodoId_anioVida: {
+            circuloId_anioVida: {
               circuloId: matricula.circuloId,
-              periodoId: solicitud.periodoId,
               anioVida: solicitud.anioSolicitado,
             },
           },
-          data: {
-            cuposOcupados: { decrement: 1 },
-            cuposDisponibles: { increment: 1 },
-          },
         });
+        if (capacidad) {
+          await this.prisma.capacidadCirculo.update({
+            where: { id: capacidad.id },
+            data: {
+              cuposOcupados: { decrement: 1 },
+              cuposDisponibles: { increment: 1 },
+            },
+          });
+        }
       }
     }
 
     const updateData: any = { ...data };
-
-    if (data.fechaLimite) {
-      updateData.fechaLimite = new Date(data.fechaLimite);
-    }
-
-    if (data.fechaOtorgamiento) {
+    if (data.fechaLimite) updateData.fechaLimite = new Date(data.fechaLimite);
+    if (data.fechaOtorgamiento)
       updateData.fechaOtorgamiento = new Date(data.fechaOtorgamiento);
-    }
 
     return this.prisma.matricula.update({
       where: { id },
@@ -518,122 +403,92 @@ export class MatriculasService {
       where: { id },
       include: { solicitud: true },
     });
-
-    if (!matricula) {
+    if (!matricula)
       throw new NotFoundException(`Matrícula con ID ${id} no encontrada`);
-    }
 
-    // Verificar que no tenga controles trimestrales asociados
     const controlesCount = await this.prisma.controlTrimestral.count({
       where: { matriculaId: id },
     });
-
     if (controlesCount > 0) {
       throw new ConflictException(
         'No se puede eliminar una matrícula con controles trimestrales asociados',
       );
     }
 
-    // Liberar el cupo si la matrícula estaba activa
     if (matricula.estado === EstadoMatricula.ACTIVA) {
       const solicitud = await this.prisma.solicitud.findUnique({
         where: { id: matricula.solicitudId },
-        select: { anioSolicitado: true, periodoId: true },
+        select: { anioSolicitado: true },
       });
-
       if (solicitud) {
-        await this.prisma.capacidadCirculo.update({
+        const capacidad = await this.prisma.capacidadCirculo.findUnique({
           where: {
-            circuloId_periodoId_anioVida: {
+            circuloId_anioVida: {
               circuloId: matricula.circuloId,
-              periodoId: solicitud.periodoId,
               anioVida: solicitud.anioSolicitado,
             },
           },
-          data: {
-            cuposOcupados: { decrement: 1 },
-            cuposDisponibles: { increment: 1 },
-          },
         });
+        if (capacidad) {
+          await this.prisma.capacidadCirculo.update({
+            where: { id: capacidad.id },
+            data: {
+              cuposOcupados: { decrement: 1 },
+              cuposDisponibles: { increment: 1 },
+            },
+          });
+        }
       }
     }
 
-    await this.prisma.matricula.delete({
-      where: { id },
-    });
-
+    await this.prisma.matricula.delete({ where: { id } });
     return { message: `Matrícula con ID ${id} eliminada exitosamente` };
   }
 
   async getEstadisticasCirculo(circuloId: string) {
-    // Verificar que el círculo existe
     const circulo = await this.prisma.circuloInfantil.findUnique({
       where: { id: circuloId },
     });
-
-    if (!circulo) {
+    if (!circulo)
       throw new NotFoundException(`Círculo con ID ${circuloId} no encontrado`);
-    }
 
-    // Obtener todas las matrículas del círculo
     const matriculas = await this.prisma.matricula.findMany({
       where: { circuloId },
       include: {
-        solicitud: {
-          include: {
-            nino: true,
-          },
-        },
-        controles: {
-          orderBy: {
-            fecha: 'desc',
-          },
-        },
+        solicitud: { include: { nino: true } },
+        controles: { orderBy: { fecha: 'desc' } },
       },
     });
 
     const total = matriculas.length;
-    const activas = matriculas.filter(
-      (m) => m.estado === EstadoMatricula.ACTIVA,
-    ).length;
-    const vencidas = matriculas.filter(
-      (m) => m.estado === EstadoMatricula.VENCIDA,
-    ).length;
+    const activas = matriculas.filter((m) => m.estado === 'ACTIVA').length;
+    const vencidas = matriculas.filter((m) => m.estado === 'VENCIDA').length;
     const canceladas = matriculas.filter(
-      (m) => m.estado === EstadoMatricula.CANCELADA,
+      (m) => m.estado === 'CANCELADA',
     ).length;
-
-    // Calcular promedio de controles por matrícula
     const totalControles = matriculas.reduce(
       (acc, m) => acc + m.controles.length,
       0,
     );
     const promedioControles = total > 0 ? totalControles / total : 0;
 
-    // Calcular matrículas con controles pendientes (más de 3 meses desde el último control)
     const hoy = new Date();
     const tresMesesAtras = new Date(
       hoy.getFullYear(),
       hoy.getMonth() - 3,
       hoy.getDate(),
     );
-
     const matriculasConControlesPendientes = matriculas
-      .filter((matricula) => matricula.estado === EstadoMatricula.ACTIVA)
-      .filter((matricula) => {
-        if (matricula.controles.length === 0) {
-          return true; // Nunca ha tenido control
-        }
-        const ultimoControl = new Date(matricula.controles[0].fecha);
+      .filter((m) => m.estado === 'ACTIVA')
+      .filter((m) => {
+        if (m.controles.length === 0) return true;
+        const ultimoControl = new Date(m.controles[0].fecha);
         return ultimoControl < tresMesesAtras;
       });
 
-    // Obtener capacidad del círculo
+    // Capacidades sin período
     const capacidades = await this.prisma.capacidadCirculo.findMany({
       where: { circuloId },
-      include: {
-        periodo: true,
-      },
     });
 
     const capacidadTotal = capacidades.reduce(
@@ -696,35 +551,23 @@ export class MatriculasService {
   async getEstadisticasGenerales() {
     const total = await this.prisma.matricula.count();
     const activas = await this.prisma.matricula.count({
-      where: { estado: EstadoMatricula.ACTIVA },
+      where: { estado: 'ACTIVA' },
     });
     const vencidas = await this.prisma.matricula.count({
-      where: { estado: EstadoMatricula.VENCIDA },
+      where: { estado: 'VENCIDA' },
     });
     const canceladas = await this.prisma.matricula.count({
-      where: { estado: EstadoMatricula.CANCELADA },
+      where: { estado: 'CANCELADA' },
     });
 
-    // Obtener distribución por círculo
     const porCirculo = await this.prisma.matricula.groupBy({
       by: ['circuloId'],
-      _count: {
-        _all: true,
-      },
-      where: {
-        estado: EstadoMatricula.ACTIVA,
-      },
+      _count: { _all: true },
+      where: { estado: 'ACTIVA' },
     });
-
-    // Obtener información de los círculos
     const circulos = await this.prisma.circuloInfantil.findMany({
-      where: {
-        id: {
-          in: porCirculo.map((item) => item.circuloId),
-        },
-      },
+      where: { id: { in: porCirculo.map((item) => item.circuloId) } },
     });
-
     const distribucionCirculos = porCirculo.map((item) => {
       const circulo = circulos.find((c) => c.id === item.circuloId);
       return {
@@ -734,26 +577,14 @@ export class MatriculasService {
       };
     });
 
-    // Obtener matrículas por mes del último año
     const ultimoAnio = new Date();
     ultimoAnio.setFullYear(ultimoAnio.getFullYear() - 1);
-
     const matriculasPorMes = await this.prisma.matricula.groupBy({
       by: ['fechaOtorgamiento'],
-      _count: {
-        _all: true,
-      },
-      where: {
-        fechaOtorgamiento: {
-          gte: ultimoAnio,
-        },
-      },
-      orderBy: {
-        fechaOtorgamiento: 'asc',
-      },
+      _count: { _all: true },
+      where: { fechaOtorgamiento: { gte: ultimoAnio } },
+      orderBy: { fechaOtorgamiento: 'asc' },
     });
-
-    // Procesar datos por mes
     const datosPorMes: Record<string, number> = {};
     matriculasPorMes.forEach((item) => {
       const fecha = new Date(item.fechaOtorgamiento);

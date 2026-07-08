@@ -82,11 +82,6 @@ export class PeriodoService {
             nino: true,
           },
         },
-        capacidades: {
-          include: {
-            circulo: true,
-          },
-        },
         sesiones: {
           orderBy: {
             fecha: 'desc',
@@ -115,11 +110,6 @@ export class PeriodoService {
             matricula: true,
           },
         },
-        capacidades: {
-          include: {
-            circulo: true,
-          },
-        },
         sesiones: {
           include: {
             decisiones: {
@@ -145,13 +135,6 @@ export class PeriodoService {
   async findActivo() {
     return this.prisma.periodoOtorgamiento.findFirst({
       where: { activo: true },
-      include: {
-        capacidades: {
-          include: {
-            circulo: true,
-          },
-        },
-      },
     });
   }
 
@@ -247,7 +230,6 @@ export class PeriodoService {
             matricula: true,
           },
         },
-        capacidades: true,
       },
     });
 
@@ -264,19 +246,6 @@ export class PeriodoService {
     ).length;
     const solicitudesPendientes =
       totalSolicitudes - solicitudesAprobadas - solicitudesDenegadas;
-
-    const cuposTotales = periodo.capacidades.reduce(
-      (acc, cap) => acc + (cap.cuposDisponibles + cap.cuposOcupados),
-      0,
-    );
-    const cuposOcupados = periodo.capacidades.reduce(
-      (acc, cap) => acc + cap.cuposOcupados,
-      0,
-    );
-    const cuposDisponibles = periodo.capacidades.reduce(
-      (acc, cap) => acc + cap.cuposDisponibles,
-      0,
-    );
 
     return {
       periodo: {
@@ -298,11 +267,6 @@ export class PeriodoService {
           totalSolicitudes > 0
             ? (solicitudesDenegadas / totalSolicitudes) * 100
             : 0,
-        cuposTotales,
-        cuposOcupados,
-        cuposDisponibles,
-        ocupacionPorcentaje:
-          cuposTotales > 0 ? (cuposOcupados / cuposTotales) * 100 : 0,
       },
     };
   }
@@ -316,21 +280,11 @@ export class PeriodoService {
     const periodos = await this.prisma.periodoOtorgamiento.findMany({
       include: {
         solicitudes: true,
-        capacidades: true,
       },
     });
 
     const solicitudesTotales = periodos.reduce(
       (acc, p) => acc + p.solicitudes.length,
-      0,
-    );
-    const cuposTotales = periodos.reduce(
-      (acc, p) =>
-        acc +
-        p.capacidades.reduce(
-          (sum, c) => sum + (c.cuposDisponibles + c.cuposOcupados),
-          0,
-        ),
       0,
     );
 
@@ -339,9 +293,7 @@ export class PeriodoService {
       activos,
       inactivos: total - activos,
       solicitudesTotales,
-      cuposTotales,
       promedioSolicitudesPorPeriodo: total > 0 ? solicitudesTotales / total : 0,
-      promedioCuposPorPeriodo: total > 0 ? cuposTotales / total : 0,
     };
   }
 

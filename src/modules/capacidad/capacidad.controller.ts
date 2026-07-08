@@ -20,7 +20,7 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { Roles } from '../../auth/decorators/roles.decorator';
-import { RolUsuario } from '../../common/index';
+import { RolUsuario, AnioVida } from '../../common/index';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { CapacidadCirculoService } from './capacidad.service';
@@ -41,7 +41,7 @@ export class CapacidadCirculoController {
   @ApiResponse({ status: 400, description: 'Datos inválidos' })
   @ApiResponse({
     status: 409,
-    description: 'Capacidad ya existe para este período',
+    description: 'Capacidad ya existe para este círculo y año de vida',
   })
   create(@Body() createCapacidadDto: CreateCapacidadDto) {
     return this.capacidadService.create(createCapacidadDto);
@@ -60,9 +60,10 @@ export class CapacidadCirculoController {
     description: 'Filtrar por círculo',
   })
   @ApiQuery({
-    name: 'periodoId',
+    name: 'anioVida',
     required: false,
-    description: 'Filtrar por período',
+    enum: AnioVida,
+    description: 'Filtrar por año de vida',
   })
   @ApiQuery({
     name: 'cuposDisponiblesMin',
@@ -73,12 +74,12 @@ export class CapacidadCirculoController {
   @ApiResponse({ status: 200, description: 'Lista de capacidades' })
   findAll(
     @Query('circuloId') circuloId?: string,
-    @Query('periodoId') periodoId?: string,
+    @Query('anioVida') anioVida?: AnioVida,
     @Query('cuposDisponiblesMin') cuposDisponiblesMin?: number,
   ) {
     return this.capacidadService.findAll({
       circuloId,
-      periodoId,
+      anioVida,
       cuposDisponiblesMin,
     });
   }
@@ -118,23 +119,7 @@ export class CapacidadCirculoController {
     return this.capacidadService.findByCirculoId(circuloId);
   }
 
-  @Get('periodo/:periodoId/disponibles')
-  @Roles(
-    RolUsuario.ADMINISTRADOR,
-    RolUsuario.FUNCIONARIO_MUNICIPAL,
-    RolUsuario.COMISION_OTORGAMIENTO,
-    RolUsuario.SOLICITANTE,
-  )
-  @ApiOperation({
-    summary: 'Obtener círculos con capacidad disponible en período',
-  })
-  @ApiParam({ name: 'periodoId', description: 'ID del período' })
-  @ApiResponse({ status: 200, description: 'Lista de capacidades disponibles' })
-  findDisponiblesByPeriodo(
-    @Param('periodoId', ParseUUIDPipe) periodoId: string,
-  ) {
-    return this.capacidadService.findDisponiblesByPeriodo(periodoId);
-  }
+  // NOTA: Se eliminaron los endpoints que dependían de periodoId (findByPeriodoId y findDisponiblesByPeriodo)
 
   @Patch(':id')
   @Roles(RolUsuario.ADMINISTRADOR, RolUsuario.FUNCIONARIO_MUNICIPAL)

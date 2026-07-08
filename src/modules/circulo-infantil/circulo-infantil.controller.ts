@@ -25,6 +25,7 @@ import { RolesGuard } from '../../auth/guards/roles.guard';
 import { CirculoInfantilService } from './circulo-infantil.service';
 import { CreateCirculoInfantilDto } from './dto/create-circulo-infantil.dto';
 import { UpdateCirculoInfantilDto } from './dto/update-circulo-infantil.dto';
+import { GetUser } from 'src/auth/decorators/get-user.decorator';
 
 @ApiTags('Círculos Infantiles')
 @ApiBearerAuth()
@@ -131,6 +132,7 @@ export class CirculoInfantilController {
     return this.circuloService.findOne(id);
   }
 
+  // Solo se modifica el método findCapacidades (eliminar periodoId)
   @Get(':id/capacidades')
   @Roles(
     RolUsuario.ADMINISTRADOR,
@@ -140,25 +142,13 @@ export class CirculoInfantilController {
   )
   @ApiOperation({ summary: 'Obtener capacidades de un círculo' })
   @ApiParam({ name: 'id', description: 'ID del círculo infantil' })
-  @ApiQuery({
-    name: 'periodoId',
-    required: false,
-    description: 'Filtrar por período',
-  })
   @ApiResponse({ status: 200, description: 'Lista de capacidades' })
-  findCapacidades(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Query('periodoId') periodoId?: string,
-  ) {
-    return this.circuloService.findCapacidades(id, periodoId);
+  findCapacidades(@Param('id', ParseUUIDPipe) id: string) {
+    return this.circuloService.findCapacidades(id);
   }
 
   @Get(':id/matriculas')
-  @Roles(
-    RolUsuario.ADMINISTRADOR,
-    RolUsuario.FUNCIONARIO_MUNICIPAL,
-    RolUsuario.DIRECTOR_CIRCULO,
-  )
+  @Roles(RolUsuario.ADMINISTRADOR, RolUsuario.DIRECTOR_CIRCULO)
   @ApiOperation({ summary: 'Obtener matrículas de un círculo' })
   @ApiParam({ name: 'id', description: 'ID del círculo infantil' })
   @ApiQuery({
@@ -175,16 +165,60 @@ export class CirculoInfantilController {
   }
 
   @Get(':id/estadisticas')
-  @Roles(
-    RolUsuario.ADMINISTRADOR,
-    RolUsuario.FUNCIONARIO_MUNICIPAL,
-    RolUsuario.DIRECTOR_CIRCULO,
-  )
+  @Roles(RolUsuario.ADMINISTRADOR, RolUsuario.DIRECTOR_CIRCULO)
   @ApiOperation({ summary: 'Obtener estadísticas del círculo' })
   @ApiParam({ name: 'id', description: 'ID del círculo infantil' })
   @ApiResponse({ status: 200, description: 'Estadísticas del círculo' })
   getEstadisticas(@Param('id', ParseUUIDPipe) id: string) {
     return this.circuloService.getEstadisticas(id);
+  }
+
+  @Get(':id/ninos-por-anio')
+  @Roles(RolUsuario.ADMINISTRADOR, RolUsuario.DIRECTOR_CIRCULO)
+  @ApiOperation({
+    summary:
+      'Obtener cantidad de niños matriculados por año de vida en el círculo',
+  })
+  @ApiParam({ name: 'id', description: 'ID del círculo infantil' })
+  @ApiResponse({
+    status: 200,
+    description: 'Estadísticas de niños por año de vida',
+    schema: {
+      example: {
+        circuloId: 'uuid',
+        circuloNombre: 'Círculo Los Pollitos',
+        total: 6,
+        porAnio: {
+          ANIO_1: 1,
+          ANIO_2: 1,
+          ANIO_3: 1,
+          ANIO_4: 1,
+          ANIO_5: 1,
+          ANIO_6: 1,
+        },
+        detalle: {
+          ANIO_1: [{ id: 'nino1', nombre: 'Juan', apellidos: 'Pérez' }],
+          ANIO_2: [{ id: 'nino2', nombre: 'María', apellidos: 'Fernández' }],
+          ANIO_3: [{ id: 'nino3', nombre: 'Dominic', apellidos: 'Livakovic' }],
+          ANIO_4: [{ id: 'nino4', nombre: 'Yann', apellidos: 'Sommer' }],
+          ANIO_5: [
+            { id: 'nino5', nombre: 'Marc André', apellidos: 'Ter Stegen' },
+          ],
+          ANIO_6: [{ id: 'nino6', nombre: 'Diogo', apellidos: 'Costa' }],
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'No tienes permiso para ver este círculo',
+  })
+  @ApiResponse({ status: 404, description: 'Círculo no encontrado' })
+  async getNiniosPorAnioVida(
+    @Param('id', ParseUUIDPipe) id: string,
+    @GetUser() usuario: any, // 🔥 Inyectar usuario autenticado
+  ) {
+    return this.circuloService.getNiniosPorAnioVida(id, usuario);
   }
 
   @Patch(':id')

@@ -1,9 +1,13 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateCirculoInfantilDto, UpdateCirculoInfantilDto } from './dto';
-import { TipoCirculo } from '@prisma/client';
+import { RolUsuario, TipoCirculo } from '@prisma/client';
 
 @Injectable()
 export class CirculoInfantilService {
@@ -22,46 +26,22 @@ export class CirculoInfantilService {
     activo?: boolean;
   }) {
     const where: any = {};
-
     if (filtros?.municipio) {
-      where.municipio = {
-        contains: filtros.municipio,
-        mode: 'insensitive',
-      };
+      where.municipio = { contains: filtros.municipio, mode: 'insensitive' };
     }
-
     if (filtros?.provincia) {
-      where.provincia = {
-        contains: filtros.provincia,
-        mode: 'insensitive',
-      };
+      where.provincia = { contains: filtros.provincia, mode: 'insensitive' };
     }
-
-    if (filtros?.tipo) {
-      where.tipo = filtros.tipo;
-    }
-
-    if (filtros?.activo !== undefined) {
-      where.activo = filtros.activo;
-    }
+    if (filtros?.tipo) where.tipo = filtros.tipo;
+    if (filtros?.activo !== undefined) where.activo = filtros.activo;
 
     return this.prisma.circuloInfantil.findMany({
       where,
       include: {
-        capacidades: {
-          include: {
-            periodo: true,
-          },
-        },
-        matriculas: {
-          where: {
-            estado: 'ACTIVA',
-          },
-        },
+        capacidades: true, // ya no incluye periodo
+        matriculas: { where: { estado: 'ACTIVA' } },
       },
-      orderBy: {
-        nombre: 'asc',
-      },
+      orderBy: { nombre: 'asc' },
     });
   }
 
@@ -70,19 +50,10 @@ export class CirculoInfantilService {
       where: { activo: true },
       include: {
         capacidades: {
-          where: {
-            cuposDisponibles: {
-              gt: 0,
-            },
-          },
-          include: {
-            periodo: true,
-          },
+          where: { cuposDisponibles: { gt: 0 } },
         },
       },
-      orderBy: {
-        nombre: 'asc',
-      },
+      orderBy: { nombre: 'asc' },
     });
   }
 
@@ -91,26 +62,11 @@ export class CirculoInfantilService {
       where: { id },
       include: {
         capacidades: {
-          include: {
-            periodo: true,
-          },
-          orderBy: {
-            periodo: {
-              fechaInicio: 'desc',
-            },
-          },
+          orderBy: { anioVida: 'asc' },
         },
         matriculas: {
-          include: {
-            solicitud: {
-              include: {
-                nino: true,
-              },
-            },
-          },
-          orderBy: {
-            fechaOtorgamiento: 'desc',
-          },
+          include: { solicitud: { include: { nino: true } } },
+          orderBy: { fechaOtorgamiento: 'desc' },
         },
       },
     });
@@ -119,80 +75,39 @@ export class CirculoInfantilService {
   async findByMunicipio(municipio: string) {
     return this.prisma.circuloInfantil.findMany({
       where: {
-        municipio: {
-          contains: municipio,
-          mode: 'insensitive',
-        },
+        municipio: { contains: municipio, mode: 'insensitive' },
         activo: true,
       },
       include: {
         capacidades: {
-          where: {
-            cuposDisponibles: {
-              gt: 0,
-            },
-          },
-          include: {
-            periodo: true,
-          },
+          where: { cuposDisponibles: { gt: 0 } },
         },
       },
     });
   }
 
-  async findCapacidades(id: string, periodoId?: string) {
-    const where: any = {
-      circuloId: id,
-    };
-
-    if (periodoId) {
-      where.periodoId = periodoId;
-    }
-
+  async findCapacidades(id: string) {
     return this.prisma.capacidadCirculo.findMany({
-      where,
-      include: {
-        periodo: true,
-      },
-      orderBy: {
-        periodo: {
-          fechaInicio: 'desc',
-        },
-      },
+      where: { circuloId: id },
+      include: { circulo: true },
+      orderBy: { anioVida: 'asc' },
     });
   }
 
   async findMatriculas(id: string, estado?: string) {
-    const where: any = {
-      circuloId: id,
-    };
-
-    if (estado) {
-      where.estado = estado;
-    }
-
+    const where: any = { circuloId: id };
+    if (estado) where.estado = estado;
     return this.prisma.matricula.findMany({
       where,
       include: {
         solicitud: {
           include: {
-            nino: {
-              include: {
-                solicitante: true,
-              },
-            },
+            nino: { include: { solicitante: true } },
           },
         },
-        controles: {
-          orderBy: {
-            fecha: 'desc',
-          },
-          take: 1,
-        },
+        controles: { orderBy: { fecha: 'desc' }, take: 1 },
       },
-      orderBy: {
-        fechaOtorgamiento: 'desc',
-      },
+      orderBy: { fechaOtorgamiento: 'desc' },
     });
   }
 
@@ -200,7 +115,7 @@ export class CirculoInfantilService {
     const circulo = await this.prisma.circuloInfantil.findUnique({
       where: { id },
       include: {
-        capacidades: { include: { periodo: true } },
+        capacidades: true,
         matriculas: { include: { solicitud: true } },
       },
     });
@@ -229,8 +144,6 @@ export class CirculoInfantilService {
     const matriculasCanceladas = circulo.matriculas.filter(
       (m) => m.estado === 'CANCELADA',
     ).length;
-
-    // Calcular ocupación actual
     const capacidadActual = circulo.capacidades.reduce(
       (acc, cap) => acc + cap.cuposOcupados,
       0,
@@ -255,6 +168,82 @@ export class CirculoInfantilService {
     };
   }
 
+  async getNiniosPorAnioVida(circuloId: string, usuario: any) {
+    // 1. Verificar que el círculo existe
+    const circulo = await this.prisma.circuloInfantil.findUnique({
+      where: { id: circuloId },
+    });
+    if (!circulo) {
+      throw new NotFoundException(`Círculo con ID ${circuloId} no encontrado`);
+    }
+
+    // 2. Verificar permisos
+    if (usuario.rol === RolUsuario.DIRECTOR_CIRCULO) {
+      // Obtener el perfil del director para verificar su círculo asignado
+      const perfilDirector = await this.prisma.perfilDirector.findUnique({
+        where: { usuarioId: usuario.id },
+      });
+      if (!perfilDirector || perfilDirector.circuloId !== circuloId) {
+        throw new ForbiddenException(
+          'No tienes permiso para ver los niños de este círculo',
+        );
+      }
+    }
+    // Si es ADMINISTRADOR, no hay restricción adicional
+
+    // 3. Obtener matrículas y contar por año
+    const matriculas = await this.prisma.matricula.findMany({
+      where: { circuloId },
+      include: {
+        solicitud: {
+          select: {
+            anioSolicitado: true,
+            nino: {
+              select: {
+                id: true,
+                nombre: true,
+                apellidos: true,
+                fechaNacimiento: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const contadorPorAnio: Record<string, number> = {
+      ANIO_1: 0,
+      ANIO_2: 0,
+      ANIO_3: 0,
+      ANIO_4: 0,
+      ANIO_5: 0,
+      ANIO_6: 0,
+    };
+    const ninosPorAnio: Record<string, any[]> = {};
+
+    for (const mat of matriculas) {
+      const anio = mat.solicitud?.anioSolicitado;
+      if (anio && contadorPorAnio[anio] !== undefined) {
+        contadorPorAnio[anio]++;
+        if (!ninosPorAnio[anio]) ninosPorAnio[anio] = [];
+        ninosPorAnio[anio].push({
+          id: mat.solicitud.nino.id,
+          nombre: mat.solicitud.nino.nombre,
+          apellidos: mat.solicitud.nino.apellidos,
+          fechaNacimiento: mat.solicitud.nino.fechaNacimiento,
+        });
+      }
+    }
+
+    return {
+      circuloId,
+      circuloNombre: circulo.nombre,
+      total: matriculas.length,
+      porAnio: contadorPorAnio,
+      detalle: ninosPorAnio,
+    };
+  }
+
   async update(id: string, data: UpdateCirculoInfantilDto) {
     const circulo = await this.prisma.circuloInfantil.findUnique({
       where: { id },
@@ -271,11 +260,8 @@ export class CirculoInfantilService {
     const circulo = await this.prisma.circuloInfantil.findUnique({
       where: { id },
     });
-
-    if (!circulo) {
+    if (!circulo)
       throw new NotFoundException(`Círculo con ID ${id} no encontrado`);
-    }
-
     return this.prisma.circuloInfantil.update({
       where: { id },
       data: { activo },
@@ -283,29 +269,18 @@ export class CirculoInfantilService {
   }
 
   async remove(id: string) {
-    // Verificar que existe
     const circulo = await this.prisma.circuloInfantil.findUnique({
       where: { id },
     });
-
-    if (!circulo) {
+    if (!circulo)
       throw new NotFoundException(`Círculo con ID ${id} no encontrado`);
-    }
 
-    // Verificar que no tenga matrículas activas
     const matriculasActivas = await this.prisma.matricula.count({
-      where: {
-        circuloId: id,
-        estado: 'ACTIVA',
-      },
+      where: { circuloId: id, estado: 'ACTIVA' },
     });
-
     if (matriculasActivas > 0) {
       throw new Error('No se puede eliminar un círculo con matrículas activas');
     }
-
-    return this.prisma.circuloInfantil.delete({
-      where: { id },
-    });
+    return this.prisma.circuloInfantil.delete({ where: { id } });
   }
 }

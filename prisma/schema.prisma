@@ -240,7 +240,6 @@ model PeriodoOtorgamiento {
 
   // Relaciones
   solicitudes     Solicitud[]
-  capacidades     CapacidadCirculo[]
   sesiones        SesionComision[]
 
   @@map("periodos_otorgamiento")
@@ -250,15 +249,13 @@ model PeriodoOtorgamiento {
 model CapacidadCirculo {
   id              String   @id @default(uuid()) @db.Uuid
   circuloId       String   @db.Uuid
-  periodoId       String   @db.Uuid
   anioVida        AnioVida @default(ANIO_1)
   cuposDisponibles Int
   cuposOcupados   Int
 
   circulo         CirculoInfantil     @relation(fields: [circuloId], references: [id], onDelete: Cascade)
-  periodo         PeriodoOtorgamiento @relation(fields: [periodoId], references: [id], onDelete: Cascade)
 
-  @@unique([circuloId, periodoId, anioVida])
+  @@unique([circuloId, anioVida])
   @@map("capacidades_circulos")
 }
 
