@@ -32,7 +32,7 @@ export class NotificacionObserver implements IObserver {
       event.data.usuarioId,
       'Cambio de estado en tu solicitud',
       mensaje,
-      'estado_solicitud',
+      'ESTADO_SOLICITUD',
     );
   }
 }

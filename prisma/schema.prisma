@@ -62,7 +62,6 @@ enum TipoCirculo {
 }
 
 enum AnioVida {
-  ANIO_1
   ANIO_2
   ANIO_3
   ANIO_4
@@ -79,6 +78,7 @@ enum EstadoMatricula {
   ACTIVA
   VENCIDA
   CANCELADA
+  ESPERANDO_ACTIVACION
 }
 
 enum RolUsuario {

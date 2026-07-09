@@ -356,11 +356,18 @@ export class SolicitudController {
         estado: {
           type: 'string',
           enum: Object.values(EstadoSolicitud),
-          example: 'APROBADA',
+          example: 'APROBADA_COMISION',
         },
         comentario: {
           type: 'string',
           example: 'Aprobada por comisión',
+          nullable: true,
+        },
+        circuloId: {
+          type: 'string',
+          description:
+            'ID del círculo asignado (requerido si el estado es APROBADA_COMISION)',
+          example: '123e4567-e89b-12d3-a456-426614174000',
           nullable: true,
         },
       },
@@ -368,13 +375,14 @@ export class SolicitudController {
     },
   })
   @ApiResponse({ status: 200, description: 'Estado actualizado' })
-  @ApiResponse({ status: 400, description: 'Estado requerido' })
+  @ApiResponse({ status: 400, description: 'Estado requerido o falta círculo' })
   @ApiResponse({ status: 404, description: 'Solicitud no encontrada' })
   cambiarEstado(
     @Request() req,
     @Param('id', ParseUUIDPipe) id: string,
     @Body('estado') estado: EstadoSolicitud | 'APROBADA' | 'RECHAZADA',
     @Body('comentario') comentario?: string,
+    @Body('circuloId') circuloId?: string,
   ) {
     if (!estado) {
       throw new BadRequestException('El campo "estado" es requerido');
@@ -395,6 +403,7 @@ export class SolicitudController {
       estadoNormalizado,
       req.user,
       comentario,
+      circuloId,
     );
   }
 

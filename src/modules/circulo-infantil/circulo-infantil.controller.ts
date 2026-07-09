@@ -216,7 +216,7 @@ export class CirculoInfantilController {
   @ApiResponse({ status: 404, description: 'Círculo no encontrado' })
   async getNiniosPorAnioVida(
     @Param('id', ParseUUIDPipe) id: string,
-    @GetUser() usuario: any, // 🔥 Inyectar usuario autenticado
+    @GetUser() usuario: any,
   ) {
     return this.circuloService.getNiniosPorAnioVida(id, usuario);
   }

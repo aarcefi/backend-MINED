@@ -25,6 +25,7 @@ import { RolesGuard } from '../../auth/guards/roles.guard';
 import { MatriculasService } from './matricula.service';
 import { CreateMatriculaDto } from './dto/create-matricula.dto';
 import { UpdateMatriculaDto } from './dto/update-matricula.dto';
+import { GetUser } from 'src/auth/decorators/get-user.decorator';
 
 @ApiTags('Matrículas')
 @ApiBearerAuth()
@@ -51,6 +52,7 @@ export class MatriculaController {
     return this.matriculasService.create(createMatriculaDto);
   }
 
+  // ========== RUTAS FIJAS (sin parámetros dinámicos) ==========
   @Get()
   @Roles(
     RolUsuario.ADMINISTRADOR,
@@ -137,6 +139,25 @@ export class MatriculaController {
     return this.matriculasService.findVencidas();
   }
 
+  @Get('pendientes-activacion')
+  @Roles(RolUsuario.DIRECTOR_CIRCULO, RolUsuario.ADMINISTRADOR)
+  @ApiOperation({
+    summary:
+      'Obtener matrículas pendientes de activación (últimos 5 días hábiles)',
+  })
+  @ApiQuery({
+    name: 'circuloId',
+    required: false,
+    description: 'ID del círculo (solo para administradores)',
+  })
+  async getPendientesActivacion(
+    @GetUser() usuario: any,
+    @Query('circuloId') circuloId?: string, // opcional para admin
+  ) {
+    return this.matriculasService.getPendientesActivacion(usuario, circuloId);
+  }
+
+  // ========== RUTAS CON PARÁMETROS DINÁMICOS (van después) ==========
   @Get('circulo/:circuloId')
   @Roles(
     RolUsuario.ADMINISTRADOR,
@@ -207,6 +228,27 @@ export class MatriculaController {
     return this.matriculasService.findByFolio(folio);
   }
 
+  @Get('estadisticas/circulo/:circuloId')
+  @Roles(
+    RolUsuario.ADMINISTRADOR,
+    RolUsuario.FUNCIONARIO_MUNICIPAL,
+    RolUsuario.DIRECTOR_CIRCULO,
+  )
+  @ApiOperation({ summary: 'Obtener estadísticas de matrículas por círculo' })
+  @ApiParam({ name: 'circuloId', description: 'ID del círculo infantil' })
+  @ApiResponse({ status: 200, description: 'Estadísticas del círculo' })
+  getEstadisticasCirculo(@Param('circuloId', ParseUUIDPipe) circuloId: string) {
+    return this.matriculasService.getEstadisticasCirculo(circuloId);
+  }
+
+  @Get('estadisticas/generales')
+  @Roles(RolUsuario.ADMINISTRADOR, RolUsuario.FUNCIONARIO_MUNICIPAL)
+  @ApiOperation({ summary: 'Obtener estadísticas generales de matrículas' })
+  @ApiResponse({ status: 200, description: 'Estadísticas generales' })
+  getEstadisticasGenerales() {
+    return this.matriculasService.getEstadisticasGenerales();
+  }
+
   @Get(':id')
   @Roles(
     RolUsuario.ADMINISTRADOR,
@@ -249,6 +291,26 @@ export class MatriculaController {
     return this.matriculasService.update(id, { estado } as UpdateMatriculaDto);
   }
 
+  @Patch(':id/activar')
+  @Roles(RolUsuario.DIRECTOR_CIRCULO, RolUsuario.ADMINISTRADOR)
+  @ApiOperation({
+    summary: 'Activar matrícula (cambiar de ESPERANDO_ACTIVACION a ACTIVA)',
+  })
+  @ApiParam({ name: 'id', description: 'ID de la matrícula' })
+  @ApiResponse({ status: 200, description: 'Matrícula activada' })
+  @ApiResponse({
+    status: 400,
+    description: 'La matrícula no está en estado ESPERANDO_ACTIVACION',
+  })
+  @ApiResponse({ status: 403, description: 'No tienes permiso' })
+  @ApiResponse({ status: 404, description: 'Matrícula no encontrada' })
+  async activarMatricula(
+    @Param('id', ParseUUIDPipe) id: string,
+    @GetUser() usuario: any,
+  ) {
+    return this.matriculasService.activarMatricula(id, usuario);
+  }
+
   @Delete(':id')
   @Roles(RolUsuario.ADMINISTRADOR)
   @ApiOperation({ summary: 'Eliminar matrícula' })
@@ -262,26 +324,5 @@ export class MatriculaController {
   })
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.matriculasService.remove(id);
-  }
-
-  @Get('estadisticas/circulo/:circuloId')
-  @Roles(
-    RolUsuario.ADMINISTRADOR,
-    RolUsuario.FUNCIONARIO_MUNICIPAL,
-    RolUsuario.DIRECTOR_CIRCULO,
-  )
-  @ApiOperation({ summary: 'Obtener estadísticas de matrículas por círculo' })
-  @ApiParam({ name: 'circuloId', description: 'ID del círculo infantil' })
-  @ApiResponse({ status: 200, description: 'Estadísticas del círculo' })
-  getEstadisticasCirculo(@Param('circuloId', ParseUUIDPipe) circuloId: string) {
-    return this.matriculasService.getEstadisticasCirculo(circuloId);
-  }
-
-  @Get('estadisticas/generales')
-  @Roles(RolUsuario.ADMINISTRADOR, RolUsuario.FUNCIONARIO_MUNICIPAL)
-  @ApiOperation({ summary: 'Obtener estadísticas generales de matrículas' })
-  @ApiResponse({ status: 200, description: 'Estadísticas generales' })
-  getEstadisticasGenerales() {
-    return this.matriculasService.getEstadisticasGenerales();
   }
 }

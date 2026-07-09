@@ -11,6 +11,7 @@ import {
   BadRequestException,
   forwardRef,
   Inject,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { NinosService } from '../nino/nino.service';
@@ -23,6 +24,7 @@ import {
   SectorPrioridad,
   TipoSolicitud,
   RolUsuario,
+  EstadoMatricula,
 } from '@prisma/client';
 import { SolicitudResponseDto } from './dto/solicitud-response.dto';
 import { PeriodoService } from '../periodo/periodo.service';
@@ -31,6 +33,7 @@ import {
   PriorityCalculator,
   PriorityContext,
 } from '../../common/prioridades/index';
+import { MatriculaPendienteActivacionEvent } from '../matricula/events/matricula-pendiente-activacion.event';
 import { EventDispatcher } from '../../common/events/event-dispatcher.service';
 import { SolicitudEstadoChangedEvent } from './events/solicitud-estado-changed.event';
 import {
@@ -40,6 +43,7 @@ import {
 
 @Injectable()
 export class SolicitudService {
+  private readonly logger = new Logger(SolicitudService.name);
   constructor(
     private readonly prisma: PrismaService,
     private readonly ninosService: NinosService,
@@ -516,6 +520,7 @@ export class SolicitudService {
     nuevoEstado: EstadoSolicitud,
     usuario: any,
     comentario?: string,
+    circuloId?: string,
   ): Promise<SolicitudResponseDto> {
     const solicitud = await this.prisma.solicitud.findUnique({
       where: { id },
@@ -538,6 +543,67 @@ export class SolicitudService {
     }
 
     const estadoAnterior = solicitud.estado;
+
+    // --- Crear matrícula si se aprueba por comisión ---
+    if (nuevoEstado === EstadoSolicitud.APROBADA_COMISION) {
+      if (!circuloId) {
+        throw new BadRequestException(
+          'Se requiere círculo para aprobar la solicitud',
+        );
+      }
+
+      const circulo = await this.prisma.circuloInfantil.findUnique({
+        where: { id: circuloId },
+      });
+      if (!circulo) {
+        throw new NotFoundException(
+          `Círculo con ID ${circuloId} no encontrado`,
+        );
+      }
+
+      const matriculaExistente = await this.prisma.matricula.findUnique({
+        where: { solicitudId: id },
+      });
+      if (matriculaExistente) {
+        throw new ConflictException(
+          'Esta solicitud ya tiene una matrícula asignada',
+        );
+      }
+
+      const fechaOtorgamiento = new Date();
+      const fechaLimite = this.calcularFechaLimite(fechaOtorgamiento, 5);
+
+      const matricula = await this.prisma.matricula.create({
+        data: {
+          solicitudId: id,
+          circuloId: circuloId,
+          fechaOtorgamiento: fechaOtorgamiento,
+          fechaLimite: fechaLimite,
+          estado: EstadoMatricula.ESPERANDO_ACTIVACION,
+          boletaUrl: null,
+          folio: await this.generarFolioUnico(),
+        },
+      });
+
+      // Notificar al director
+      const director = await this.prisma.perfilDirector.findUnique({
+        where: { circuloId },
+        include: { usuario: true },
+      });
+
+      if (director?.usuario) {
+        const evento = new MatriculaPendienteActivacionEvent({
+          matriculaId: matricula.id,
+          folio: matricula.folio,
+          circuloNombre: circulo.nombre,
+          directorId: director.usuario.id,
+          directorEmail: director.usuario.email,
+          directorNombre: `${director.usuario.nombre} ${director.usuario.apellidos}`,
+          fechaOtorgamiento: matricula.fechaOtorgamiento,
+        });
+        await this.eventDispatcher.dispatch(evento);
+      }
+    }
 
     // Trazabilidad
     await this.trazabilidadService.crearTrazabilidadAutomatica(
@@ -562,12 +628,11 @@ export class SolicitudService {
       },
     });
 
-    // Datos del solicitante y del niño para notificaciones
+    // Disparar evento para notificaciones al solicitante (siempre que el estado cambie)
     const solicitanteUsuario = solicitud.solicitante.usuario;
     const nino = solicitud.nino;
     const nombreSolicitante = `${solicitanteUsuario.nombre} ${solicitanteUsuario.apellidos}`;
 
-    // Disparar evento para notificaciones y correo
     const evento = new SolicitudEstadoChangedEvent({
       solicitudId: id,
       usuarioId: solicitanteUsuario.id,
@@ -581,7 +646,44 @@ export class SolicitudService {
     });
     await this.eventDispatcher.dispatch(evento);
 
+    // 🔥 Retornar la solicitud actualizada (siempre al final)
     return this.toResponseDto(solicitudActualizada);
+  }
+
+  // Método auxiliar para calcular días hábiles
+  private calcularFechaLimite(fechaInicio: Date, diasHabiles: number): Date {
+    const fecha = new Date(fechaInicio);
+    let diasAgregados = 0;
+    while (diasAgregados < diasHabiles) {
+      fecha.setDate(fecha.getDate() + 1);
+      const diaSemana = fecha.getDay();
+      if (diaSemana !== 0 && diaSemana !== 6) {
+        // No sábado ni domingo
+        diasAgregados++;
+      }
+    }
+    return fecha;
+  }
+
+  // Método auxiliar para generar folio único (copia del que está en MatriculasService)
+  // Podrías moverlo a un servicio común o duplicarlo aquí por simplicidad.
+  // Recomiendo extraer a un servicio de utilidades, pero para este ejemplo lo duplicaré.
+  private async generarFolioUnico(): Promise<string> {
+    const fecha = new Date();
+    const year = fecha.getFullYear();
+    const month = String(fecha.getMonth() + 1).padStart(2, '0');
+    const day = String(fecha.getDate()).padStart(2, '0');
+    let folio = `MAT-${year}${month}${day}-${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
+    let intentos = 0;
+    while (intentos < 10) {
+      const existe = await this.prisma.matricula.findUnique({
+        where: { folio },
+      });
+      if (!existe) return folio;
+      folio = `MAT-${year}${month}${day}-${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
+      intentos++;
+    }
+    throw new Error('No se pudo generar folio único');
   }
 
   async remove(id: string, usuario: any): Promise<{ message: string }> {
