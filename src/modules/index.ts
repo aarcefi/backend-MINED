@@ -13,4 +13,3 @@ export * from './trazabilidad/trazabilidad.module';
 export * from './usuario/usuarios.module';
 export * from './perfiles/perfiles.module';
 export * from './notificacion/notificaciones.module';
-export * from './traslado/traslado.module';

@@ -185,24 +185,11 @@ export class SolicitudController {
     description: 'Lista de solicitudes pendientes de revisión',
     type: [SolicitudListResponseDto],
   })
-<<<<<<< HEAD
-  findPendientesRevision(
-    @Request() req,
-    @Query('municipio') municipioQuery?: string,
-  ) {
-    // Filtrar por municipio si es director de círculo
-    const municipio =
-      req.user.rol === RolUsuario.DIRECTOR_CIRCULO
-        ? req.user.perfil?.municipio
-        : municipioQuery || req.user.municipio;
-
-=======
   findPendientesRevision(@Request() req) {
     const municipio =
       req.user.rol === RolUsuario.DIRECTOR_CIRCULO
         ? req.user.perfil?.municipio
         : undefined;
->>>>>>> 78b2c27 (Ultimo commit antes de exponer)
     return this.solicitudService.findPendientesRevision(municipio);
   }
 
@@ -390,7 +377,6 @@ export class SolicitudController {
     if (!estado) {
       throw new BadRequestException('El campo "estado" es requerido');
     }
-<<<<<<< HEAD
     const estadoNormalizado =
       estado === 'APROBADA'
         ? req.user.rol === RolUsuario.COMISION_OTORGAMIENTO
@@ -402,13 +388,6 @@ export class SolicitudController {
             : EstadoSolicitud.RECHAZADA_DIRECCION
           : estado;
 
-=======
-    if (estado === EstadoSolicitud.APROBADA_COMISION && !circuloId) {
-      throw new BadRequestException(
-        'Se requiere el ID del círculo para aprobar la solicitud',
-      );
-    }
->>>>>>> 78b2c27 (Ultimo commit antes de exponer)
     return this.solicitudService.cambiarEstado(
       id,
       estadoNormalizado,
