@@ -11,7 +11,7 @@ export class MatriculaCanceladaEvent implements IEvent {
       email: string;
       nombre: string;
       circuloNombre: string;
-      motivo: 'vencida' | 'manual'; // indica la causa
+      motivo: 'vencida' | 'manual';
     },
   ) {}
 }

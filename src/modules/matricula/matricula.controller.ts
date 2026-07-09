@@ -152,12 +152,11 @@ export class MatriculaController {
   })
   async getPendientesActivacion(
     @GetUser() usuario: any,
-    @Query('circuloId') circuloId?: string, // opcional para admin
+    @Query('circuloId') circuloId?: string,
   ) {
     return this.matriculasService.getPendientesActivacion(usuario, circuloId);
   }
 
-  // ========== RUTAS CON PARÁMETROS DINÁMICOS (van después) ==========
   @Get('circulo/:circuloId')
   @Roles(
     RolUsuario.ADMINISTRADOR,

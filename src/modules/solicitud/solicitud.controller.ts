@@ -139,7 +139,6 @@ export class SolicitudController {
     @Query('fechaDesde') fechaDesde?: string,
     @Query('fechaHasta') fechaHasta?: string,
   ) {
-    // Si es solicitante, solo ver sus propias solicitudes
     if (req.user.rol === RolUsuario.SOLICITANTE) {
       if (!req.user.perfilId) {
         throw new UnauthorizedException('Perfil de solicitante no encontrado');
@@ -147,7 +146,6 @@ export class SolicitudController {
       solicitanteId = req.user.perfilId;
     }
 
-    // Si es director de círculo, filtrar por su municipio
     if (req.user.rol === RolUsuario.DIRECTOR_CIRCULO && req.user.perfil) {
       municipio = req.user.perfil.municipio;
     }
@@ -187,6 +185,7 @@ export class SolicitudController {
     description: 'Lista de solicitudes pendientes de revisión',
     type: [SolicitudListResponseDto],
   })
+<<<<<<< HEAD
   findPendientesRevision(
     @Request() req,
     @Query('municipio') municipioQuery?: string,
@@ -197,6 +196,13 @@ export class SolicitudController {
         ? req.user.perfil?.municipio
         : municipioQuery || req.user.municipio;
 
+=======
+  findPendientesRevision(@Request() req) {
+    const municipio =
+      req.user.rol === RolUsuario.DIRECTOR_CIRCULO
+        ? req.user.perfil?.municipio
+        : undefined;
+>>>>>>> 78b2c27 (Ultimo commit antes de exponer)
     return this.solicitudService.findPendientesRevision(municipio);
   }
 
@@ -218,7 +224,6 @@ export class SolicitudController {
     @Request() req,
     @Param('solicitanteId', ParseUUIDPipe) solicitanteId: string,
   ) {
-    // Si es solicitante, solo puede ver sus propias solicitudes
     if (req.user.rol === RolUsuario.SOLICITANTE) {
       if (!req.user.perfilId) {
         throw new UnauthorizedException('Perfil de solicitante no encontrado');
@@ -270,11 +275,9 @@ export class SolicitudController {
     @Query('periodoId') periodoId?: string,
     @Query('municipio') municipio?: string,
   ) {
-    // Si es director de círculo, filtrar por su municipio
     if (req.user.rol === RolUsuario.DIRECTOR_CIRCULO && req.user.perfil) {
       municipio = req.user.perfil.municipio;
     }
-
     return this.solicitudService.getEstadisticas({ periodoId, municipio });
   }
 
@@ -387,6 +390,7 @@ export class SolicitudController {
     if (!estado) {
       throw new BadRequestException('El campo "estado" es requerido');
     }
+<<<<<<< HEAD
     const estadoNormalizado =
       estado === 'APROBADA'
         ? req.user.rol === RolUsuario.COMISION_OTORGAMIENTO
@@ -398,6 +402,13 @@ export class SolicitudController {
             : EstadoSolicitud.RECHAZADA_DIRECCION
           : estado;
 
+=======
+    if (estado === EstadoSolicitud.APROBADA_COMISION && !circuloId) {
+      throw new BadRequestException(
+        'Se requiere el ID del círculo para aprobar la solicitud',
+      );
+    }
+>>>>>>> 78b2c27 (Ultimo commit antes de exponer)
     return this.solicitudService.cambiarEstado(
       id,
       estadoNormalizado,

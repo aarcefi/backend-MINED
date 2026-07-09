@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable } from '@nestjs/common';
@@ -12,9 +14,10 @@ export class MatriculaPendienteNotificacionObserver implements IObserver {
   async handle(event: IEvent): Promise<void> {
     if (event.name !== 'matricula.pendiente.activacion') return;
 
-    const { directorId, directorNombre, folio, circuloNombre } = event.data;
+    const { directorId, directorNombre, folio, circuloNombre, fechaLimite } =
+      event.data;
     const titulo = 'Nueva matrícula pendiente de activación';
-    const mensaje = `Hola ${directorNombre}, se ha creado una nueva matrícula con folio ${folio} para el círculo "${circuloNombre}".`;
+    const mensaje = `Hola ${directorNombre}, se ha creado una nueva matrícula con folio ${folio} para el círculo "${circuloNombre}". Debes activarla antes del ${fechaLimite.toLocaleDateString()}.`;
 
     await this.notificacionesService.createForUsuario(
       directorId,

@@ -28,7 +28,6 @@ export class MatriculasService {
   ) {}
 
   async create(createMatriculaDto: CreateMatriculaDto) {
-    // Verificar que la solicitud existe
     const solicitud = await this.prisma.solicitud.findUnique({
       where: { id: createMatriculaDto.solicitudId },
     });
@@ -39,7 +38,6 @@ export class MatriculasService {
       );
     }
 
-    // Verificar que el círculo infantil existe
     const circulo = await this.prisma.circuloInfantil.findUnique({
       where: { id: createMatriculaDto.circuloId },
     });
@@ -50,14 +48,12 @@ export class MatriculasService {
       );
     }
 
-    // Validar que el círculo ofrezca el año de vida solicitado
     if (!circulo.tieneSextoAnio && solicitud.anioSolicitado === 'ANIO_6') {
       throw new ConflictException(
         'Este círculo no ofrece el sexto año de vida',
       );
     }
 
-    // Verificar que la solicitud no tenga ya una matrícula
     const matriculaExistente = await this.prisma.matricula.findUnique({
       where: { solicitudId: createMatriculaDto.solicitudId },
     });
@@ -68,7 +64,6 @@ export class MatriculasService {
       );
     }
 
-    // Buscar capacidad por círculo y año de vida (sin período)
     const capacidad = await this.prisma.capacidadCirculo.findUnique({
       where: {
         circuloId_anioVida: {
@@ -84,10 +79,8 @@ export class MatriculasService {
       );
     }
 
-    // Generar folio único
     const folio = await this.generarFolioUnico();
 
-    // Crear la matrícula y actualizar la capacidad
     const [matricula] = await this.prisma.$transaction([
       this.prisma.matricula.create({
         data: {
@@ -117,7 +110,6 @@ export class MatriculasService {
       }),
     ]);
 
-    // Disparar evento para notificaciones y correo
     if (matricula.estado !== EstadoMatricula.CANCELADA) {
       const solicitante = matricula.solicitud.solicitante;
       const usuario = solicitante.usuario;
@@ -348,7 +340,6 @@ export class MatriculasService {
     if (!matricula)
       throw new NotFoundException(`Matrícula con ID ${id} no encontrada`);
 
-    // Si se cancela, liberar cupo
     if (
       data.estado === EstadoMatricula.CANCELADA &&
       matricula.estado !== EstadoMatricula.CANCELADA
@@ -488,7 +479,6 @@ export class MatriculasService {
         return ultimoControl < tresMesesAtras;
       });
 
-    // Capacidades sin período
     const capacidades = await this.prisma.capacidadCirculo.findMany({
       where: { circuloId },
     });
@@ -611,55 +601,55 @@ export class MatriculasService {
   }
 
   async getPendientesActivacion(usuario: any, circuloId?: string) {
-  let circuloIds: string[] = [];
+    let circuloIds: string[] = [];
 
-  if (usuario.rol === 'DIRECTOR_CIRCULO') {
-    const perfilDirector = await this.prisma.perfilDirector.findUnique({
-      where: { usuarioId: usuario.id },
-    });
-    if (!perfilDirector) {
-      throw new NotFoundException('Perfil de director no encontrado');
-    }
-    circuloIds = [perfilDirector.circuloId];
-  } else if (usuario.rol === 'ADMINISTRADOR') {
-    if (circuloId) {
-      // Validar que el círculo existe
-      const circulo = await this.prisma.circuloInfantil.findUnique({
-        where: { id: circuloId },
+    if (usuario.rol === 'DIRECTOR_CIRCULO') {
+      const perfilDirector = await this.prisma.perfilDirector.findUnique({
+        where: { usuarioId: usuario.id },
       });
-      if (!circulo) throw new NotFoundException('Círculo no encontrado');
-      circuloIds = [circuloId];
+      if (!perfilDirector) {
+        throw new NotFoundException('Perfil de director no encontrado');
+      }
+      circuloIds = [perfilDirector.circuloId];
+    } else if (usuario.rol === 'ADMINISTRADOR') {
+      if (circuloId) {
+        const circulo = await this.prisma.circuloInfantil.findUnique({
+          where: { id: circuloId },
+        });
+        if (!circulo) throw new NotFoundException('Círculo no encontrado');
+        circuloIds = [circuloId];
+      }
+    } else {
+      throw new ForbiddenException(
+        'No tienes permiso para ver estas matrículas',
+      );
     }
-    // Si no hay circuloId, no se filtra (trae todas)
-  } else {
-    throw new ForbiddenException('No tienes permiso para ver estas matrículas');
-  }
 
-  const fechaLimite = this.getLastBusinessDays(5);
+    const fechaLimite = this.getLastBusinessDays(5);
 
-  const where: any = {
-    estado: 'ESPERANDO_ACTIVACION',
-    fechaOtorgamiento: { gte: fechaLimite },
-  };
+    const where: any = {
+      estado: 'ESPERANDO_ACTIVACION',
+      fechaOtorgamiento: { gte: fechaLimite },
+    };
 
-  if (circuloIds.length > 0) {
-    where.circuloId = { in: circuloIds };
-  }
+    if (circuloIds.length > 0) {
+      where.circuloId = { in: circuloIds };
+    }
 
-  return this.prisma.matricula.findMany({
-    where,
-    include: {
-      solicitud: {
-        include: {
-          nino: true,
-          solicitante: { include: { usuario: true } },
+    return this.prisma.matricula.findMany({
+      where,
+      include: {
+        solicitud: {
+          include: {
+            nino: true,
+            solicitante: { include: { usuario: true } },
+          },
         },
+        circulo: true,
       },
-      circulo: true,
-    },
-    orderBy: { fechaOtorgamiento: 'asc' },
-  });
-}
+      orderBy: { fechaOtorgamiento: 'asc' },
+    });
+  }
 
   private getLastBusinessDays(days: number): Date {
     const today = new Date();
@@ -675,136 +665,137 @@ export class MatriculasService {
     return d;
   }
 
-async activarMatricula(id: string, usuario: any) {
-  const matricula = await this.prisma.matricula.findUnique({
-    where: { id },
-    include: { solicitud: true },
-  });
-  if (!matricula) throw new NotFoundException(`Matrícula ${id} no encontrada`);
-
-  // Verificar estado
-  if (matricula.estado !== EstadoMatricula.ESPERANDO_ACTIVACION) {
-    throw new BadRequestException('Solo se pueden activar matrículas en estado ESPERANDO_ACTIVACION');
-  }
-
-  // Verificar que el usuario sea director del círculo o administrador
-  if (usuario.rol === RolUsuario.DIRECTOR_CIRCULO) {
-    const perfilDirector = await this.prisma.perfilDirector.findUnique({
-      where: { usuarioId: usuario.id },
-    });
-    if (!perfilDirector || perfilDirector.circuloId !== matricula.circuloId) {
-      throw new ForbiddenException('No tienes permiso para activar esta matrícula');
-    }
-  }
-
-  // Calcular nueva fecha límite (1 año desde hoy)
-  const nuevaFechaLimite = new Date();
-  nuevaFechaLimite.setFullYear(nuevaFechaLimite.getFullYear() + 1);
-
-  // Buscar capacidad para descontar
-  const capacidad = await this.prisma.capacidadCirculo.findUnique({
-    where: {
-      circuloId_anioVida: {
-        circuloId: matricula.circuloId,
-        anioVida: matricula.solicitud.anioSolicitado,
-      },
-    },
-  });
-  if (!capacidad || capacidad.cuposDisponibles <= 0) {
-    throw new ConflictException('No hay cupos disponibles para activar esta matrícula');
-  }
-
-  // Actualizar matrícula y descontar cupo en transacción
-  const [matriculaActualizada] = await this.prisma.$transaction([
-    this.prisma.matricula.update({
+  async activarMatricula(id: string, usuario: any) {
+    const matricula = await this.prisma.matricula.findUnique({
       where: { id },
-      data: {
-        estado: EstadoMatricula.ACTIVA,
-        fechaLimite: nuevaFechaLimite,
+      include: { solicitud: true },
+    });
+    if (!matricula) throw new NotFoundException(`Matrícula ${id} no encontrada`);
+
+    if (matricula.estado !== EstadoMatricula.ESPERANDO_ACTIVACION) {
+      throw new BadRequestException(
+        'Solo se pueden activar matrículas en estado ESPERANDO_ACTIVACION',
+      );
+    }
+
+    if (usuario.rol === RolUsuario.DIRECTOR_CIRCULO) {
+      const perfilDirector = await this.prisma.perfilDirector.findUnique({
+        where: { usuarioId: usuario.id },
+      });
+      if (!perfilDirector || perfilDirector.circuloId !== matricula.circuloId) {
+        throw new ForbiddenException(
+          'No tienes permiso para activar esta matrícula',
+        );
+      }
+    }
+
+    const nuevaFechaLimite = new Date();
+    nuevaFechaLimite.setFullYear(nuevaFechaLimite.getFullYear() + 1);
+
+    const capacidad = await this.prisma.capacidadCirculo.findUnique({
+      where: {
+        circuloId_anioVida: {
+          circuloId: matricula.circuloId,
+          anioVida: matricula.solicitud.anioSolicitado,
+        },
+      },
+    });
+    if (!capacidad || capacidad.cuposDisponibles <= 0) {
+      throw new ConflictException(
+        'No hay cupos disponibles para activar esta matrícula',
+      );
+    }
+
+    const [matriculaActualizada] = await this.prisma.$transaction([
+      this.prisma.matricula.update({
+        where: { id },
+        data: {
+          estado: EstadoMatricula.ACTIVA,
+          fechaLimite: nuevaFechaLimite,
+        },
+        include: {
+          solicitud: {
+            include: {
+              nino: true,
+              solicitante: { include: { usuario: true } },
+            },
+          },
+          circulo: true,
+        },
+      }),
+      this.prisma.capacidadCirculo.update({
+        where: { id: capacidad.id },
+        data: {
+          cuposOcupados: { increment: 1 },
+          cuposDisponibles: { decrement: 1 },
+        },
+      }),
+    ]);
+
+    const solicitante = matriculaActualizada.solicitud.solicitante;
+    const usuarioSolicitante = solicitante.usuario;
+    if (usuarioSolicitante) {
+      await this.prisma.notificacion.create({
+        data: {
+          usuarioId: usuarioSolicitante.id,
+          titulo: '¡Matrícula activada!',
+          mensaje: `Tu matrícula para ${matriculaActualizada.circulo.nombre} ha sido activada.`,
+          tipo: 'MATRICULA',
+          fecha: new Date(),
+          leida: false,
+        },
+      });
+    }
+
+    return matriculaActualizada;
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  async cancelarMatriculasVencidas() {
+    const hoy = new Date();
+    const matriculasVencidas = await this.prisma.matricula.findMany({
+      where: {
+        estado: EstadoMatricula.ESPERANDO_ACTIVACION,
+        fechaLimite: { lt: hoy },
       },
       include: {
-        solicitud: { include: { nino: true, solicitante: { include: { usuario: true } } } },
-        circulo: true,
-      },
-    }),
-    this.prisma.capacidadCirculo.update({
-      where: { id: capacidad.id },
-      data: {
-        cuposOcupados: { increment: 1 },
-        cuposDisponibles: { decrement: 1 },
-      },
-    }),
-  ]);
-
-  // Disparar evento de activación (notificación al solicitante)
-  const solicitante = matriculaActualizada.solicitud.solicitante;
-  const usuarioSolicitante = solicitante.usuario;
-  if (usuarioSolicitante) {
-    // Podrías crear una notificación personalizada aquí
-    // (ejemplo: crear notificación en tabla notificaciones)
-    await this.prisma.notificacion.create({
-      data: {
-        usuarioId: usuarioSolicitante.id,
-        titulo: '¡Matrícula activada!',
-        mensaje: `Tu matrícula para ${matriculaActualizada.circulo.nombre} ha sido activada.`,
-        tipo: 'MATRICULA',
-        fecha: new Date(),
-        leida: false,
-      },
-    });
-  }
-
-  return matriculaActualizada;
-}
-
-// Scheduler para cancelar matrículas vencidas en estado ESPERANDO_ACTIVACION
-@Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
-async cancelarMatriculasVencidas() {
-  const hoy = new Date();
-  const matriculasVencidas = await this.prisma.matricula.findMany({
-    where: {
-      estado: EstadoMatricula.ESPERANDO_ACTIVACION,
-      fechaLimite: { lt: hoy },
-    },
-    include: {
-      solicitud: {
-        include: {
-          nino: true,
-          solicitante: {
-            include: {
-              usuario: true,
+        solicitud: {
+          include: {
+            nino: true,
+            solicitante: {
+              include: {
+                usuario: true,
+              },
             },
           },
         },
+        circulo: true,
       },
-      circulo: true,
-    },
-  });
-
-  for (const mat of matriculasVencidas) {
-    // Actualizar estado a CANCELADA
-    await this.prisma.matricula.update({
-      where: { id: mat.id },
-      data: { estado: EstadoMatricula.CANCELADA },
     });
 
-    // Obtener datos del solicitante
-    const solicitante = mat.solicitud.solicitante;
-    const usuario = solicitante.usuario;
-    if (usuario) {
-      const evento = new MatriculaCanceladaEvent({
-        matriculaId: mat.id,
-        folio: mat.folio,
-        usuarioId: usuario.id,
-        email: usuario.email,
-        nombre: `${usuario.nombre} ${usuario.apellidos}`,
-        circuloNombre: mat.circulo.nombre,
-        motivo: 'vencida',
+    for (const mat of matriculasVencidas) {
+      await this.prisma.matricula.update({
+        where: { id: mat.id },
+        data: { estado: EstadoMatricula.CANCELADA },
       });
-      await this.eventDispatcher.dispatch(evento);
-    }
-  }
-  this.logger.log(`Se cancelaron ${matriculasVencidas.length} matrículas vencidas`);
-}
-}
 
+      const solicitante = mat.solicitud.solicitante;
+      const usuario = solicitante.usuario;
+      if (usuario) {
+        const evento = new MatriculaCanceladaEvent({
+          matriculaId: mat.id,
+          folio: mat.folio,
+          usuarioId: usuario.id,
+          email: usuario.email,
+          nombre: `${usuario.nombre} ${usuario.apellidos}`,
+          circuloNombre: mat.circulo.nombre,
+          motivo: 'vencida',
+        });
+        await this.eventDispatcher.dispatch(evento);
+      }
+    }
+    this.logger.log(
+      `Se cancelaron ${matriculasVencidas.length} matrículas vencidas`,
+    );
+  }
+}

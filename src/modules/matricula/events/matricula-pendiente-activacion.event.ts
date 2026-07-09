@@ -12,6 +12,7 @@ export class MatriculaPendienteActivacionEvent implements IEvent {
       directorEmail: string;
       directorNombre: string;
       fechaOtorgamiento: Date;
+      fechaLimite: Date;
     },
   ) {}
 }

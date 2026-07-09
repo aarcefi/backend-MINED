@@ -60,7 +60,6 @@ export class SolicitudService {
     data: CreateSolicitudDto,
     usuario: any,
   ): Promise<SolicitudResponseDto> {
-    // Verificar que el solicitante existe
     const solicitante = await this.prisma.perfilSolicitante.findUnique({
       where: { id: data.solicitanteId },
       include: { usuario: true },
@@ -72,11 +71,9 @@ export class SolicitudService {
     }
 
     const fechaActual = new Date();
-
     const periodoActivo =
       await this.periodoService.obtenerPeriodoActivo(fechaActual);
 
-    // Buscar niño existente por tarjetaMenor y solicitanteId
     let nino = await this.prisma.nino.findFirst({
       where: {
         tarjetaMenor: data.nino.tarjetaMenor,
@@ -101,7 +98,6 @@ export class SolicitudService {
       }
     }
 
-    // Verificar solicitud activa en el período
     const solicitudExistente = await this.prisma.solicitud.findFirst({
       where: {
         ninoId: nino.id,
@@ -115,7 +111,6 @@ export class SolicitudService {
       );
     }
 
-    // 🔥 Calcular año de vida del niño según fecha de nacimiento y fecha actual
     const anioVida = this.dateUtils.calcularAnioVida(
       nino.fechaNacimiento,
       fechaActual,
@@ -126,7 +121,6 @@ export class SolicitudService {
       );
     }
 
-    // Calcular prioridad usando el PriorityCalculator
     const context: PriorityContext = {
       sector: data.sector,
       tipoSolicitud: data.tipoSolicitud,
@@ -140,7 +134,6 @@ export class SolicitudService {
     };
     const prioridad = this.priorityCalculator.calculatePriority(context);
 
-    // Crear solicitud (incluyendo anioSolicitado)
     const solicitud = await this.prisma.solicitud.create({
       data: {
         ninoId: nino.id,
@@ -162,7 +155,6 @@ export class SolicitudService {
       },
     });
 
-    // Trazabilidad inicial
     await this.trazabilidadService.crearTrazabilidadAutomatica(
       solicitud.id,
       null,
@@ -206,7 +198,6 @@ export class SolicitudService {
       };
     }
 
-    // Filtro por municipio para directores de círculo
     if (usuario?.rol === RolUsuario.DIRECTOR_CIRCULO && usuario.perfil) {
       where.solicitante = {
         usuario: {
@@ -338,7 +329,6 @@ export class SolicitudService {
     data: UpdateSolicitudDto,
     usuario: any,
   ): Promise<SolicitudResponseDto> {
-    // Obtener la solicitud con relaciones necesarias
     const solicitud = await this.prisma.solicitud.findUnique({
       where: { id },
       include: {
@@ -351,14 +341,12 @@ export class SolicitudService {
       throw new NotFoundException(`Solicitud con ID ${id} no encontrada`);
     }
 
-    // Verificar permisos de acceso (lectura) usando el método existente
     this.verificarPermisosSolicitud(solicitud, usuario);
 
     const updateData: any = {};
     let estadoCambio = false;
     const estadoAnterior = solicitud.estado;
 
-    // Reglas según el rol
     if (usuario.rol === RolUsuario.SOLICITANTE) {
       if (data.sector !== undefined) updateData.sector = data.sector;
       if (data.tipoSolicitud !== undefined)
@@ -366,7 +354,6 @@ export class SolicitudService {
       if (data.observaciones !== undefined)
         updateData.observaciones = data.observaciones;
     } else {
-      // Otros roles (funcionario, comisión, director, admin) pueden modificar todo
       if (data.sector !== undefined) updateData.sector = data.sector;
       if (data.tipoSolicitud !== undefined)
         updateData.tipoSolicitud = data.tipoSolicitud;
@@ -380,7 +367,6 @@ export class SolicitudService {
         updateData.observaciones = data.observaciones;
     }
 
-    // Recalcular prioridad si cambió sector o tipoSolicitud (para cualquier rol)
     const necesitaRecalcular =
       data.sector !== undefined || data.tipoSolicitud !== undefined;
     if (necesitaRecalcular) {
@@ -398,12 +384,10 @@ export class SolicitudService {
       updateData.prioridad = this.priorityCalculator.calculatePriority(context);
     }
 
-    // Si no hay nada que actualizar, retornar sin cambios
     if (Object.keys(updateData).length === 0) {
       return this.toResponseDto(solicitud);
     }
 
-    // Aplicar actualización
     const solicitudActualizada = await this.prisma.solicitud.update({
       where: { id },
       data: updateData,
@@ -416,7 +400,6 @@ export class SolicitudService {
       },
     });
 
-    // Trazabilidad si cambió el estado (solo para roles que pueden hacerlo)
     if (estadoCambio && data.estado) {
       await this.trazabilidadService.crearTrazabilidadAutomatica(
         id,
@@ -431,7 +414,6 @@ export class SolicitudService {
       );
     }
 
-    // Disparar evento de cambio de estado
     if (estadoCambio && data.estado && usuario.rol !== RolUsuario.SOLICITANTE) {
       const nino = solicitud.nino;
       const solicitanteUsuario = solicitud.solicitante.usuario;
@@ -478,7 +460,6 @@ export class SolicitudService {
       updateNinoDto,
     );
 
-    // Recalcular prioridad si afecta
     const necesitaRecalcular =
       updateNinoDto.casoEspecial !== undefined ||
       updateNinoDto.tipoNecesidad !== undefined;
@@ -544,7 +525,7 @@ export class SolicitudService {
 
     const estadoAnterior = solicitud.estado;
 
-    // --- Crear matrícula si se aprueba por comisión ---
+    // Crear matrícula si se aprueba por comisión
     if (nuevoEstado === EstadoSolicitud.APROBADA_COMISION) {
       if (!circuloId) {
         throw new BadRequestException(
@@ -600,6 +581,7 @@ export class SolicitudService {
           directorEmail: director.usuario.email,
           directorNombre: `${director.usuario.nombre} ${director.usuario.apellidos}`,
           fechaOtorgamiento: matricula.fechaOtorgamiento,
+          fechaLimite: matricula.fechaLimite,
         });
         await this.eventDispatcher.dispatch(evento);
       }
@@ -628,7 +610,7 @@ export class SolicitudService {
       },
     });
 
-    // Disparar evento para notificaciones al solicitante (siempre que el estado cambie)
+    // Disparar evento para notificaciones al solicitante
     const solicitanteUsuario = solicitud.solicitante.usuario;
     const nino = solicitud.nino;
     const nombreSolicitante = `${solicitanteUsuario.nombre} ${solicitanteUsuario.apellidos}`;
@@ -829,7 +811,6 @@ export class SolicitudService {
   }
 
   private toResponseDto(solicitud: any): SolicitudResponseDto {
-    // Verificaciones de integridad
     if (!solicitud) {
       throw new Error('No se proporcionó una solicitud para mapear');
     }

@@ -39,7 +39,6 @@ export class EventsModule {
     private matriculaPendienteNotificacionObserver: MatriculaPendienteNotificacionObserver,
     private matriculaPendienteEmailObserver: MatriculaPendienteEmailObserver,
   ) {
-    // Registrar observadores de solicitud
     this.eventDispatcher.register(
       'solicitud.estado.cambiado',
       this.notificacionObserver,
@@ -57,6 +56,22 @@ export class EventsModule {
     this.eventDispatcher.register(
       'matricula.creada',
       this.matriculaEmailObserver,
+    );
+    this.eventDispatcher.register(
+      'matricula.cancelada',
+      this.matriculaCanceladaNotificacionObserver,
+    );
+    this.eventDispatcher.register(
+      'matricula.cancelada',
+      this.matriculaCanceladaEmailObserver,
+    );
+    this.eventDispatcher.register(
+      'matricula.pendiente.activacion',
+      this.matriculaPendienteNotificacionObserver,
+    );
+    this.eventDispatcher.register(
+      'matricula.pendiente.activacion',
+      this.matriculaPendienteEmailObserver,
     );
 
     // Registrar observadores de matrícula cancelada
