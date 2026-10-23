@@ -13,6 +13,9 @@ export class SolicitudListResponseDto {
   @ApiProperty()
   fechaSolicitud: Date;
 
+  @ApiProperty()
+  circuloNombre: string;
+
   @ApiProperty({ enum: AnioVida })
   anioVida: AnioVida;
 

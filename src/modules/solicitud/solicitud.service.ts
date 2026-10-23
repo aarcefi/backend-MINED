@@ -44,6 +44,7 @@ import {
 @Injectable()
 export class SolicitudService {
   private readonly logger = new Logger(SolicitudService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly ninosService: NinosService,
@@ -73,6 +74,18 @@ export class SolicitudService {
     const fechaActual = new Date();
     const periodoActivo =
       await this.periodoService.obtenerPeriodoActivo(fechaActual);
+
+    // 🔥 Validar círculo si viene en el DTO
+    if (data.circuloId) {
+      const circulo = await this.prisma.circuloInfantil.findUnique({
+        where: { id: data.circuloId },
+      });
+      if (!circulo) {
+        throw new NotFoundException(
+          `Círculo infantil con ID ${data.circuloId} no encontrado`,
+        );
+      }
+    }
 
     let nino = await this.prisma.nino.findFirst({
       where: {
@@ -146,11 +159,13 @@ export class SolicitudService {
         observaciones: data.observaciones,
         prioridad,
         anioSolicitado: anioVida,
+        circuloId: data.circuloId ?? null,
       },
       include: {
         nino: true,
         periodo: true,
         solicitante: { include: { usuario: true } },
+        circulo: true, // 🔥 NUEVO
         documentos: true,
       },
     });
@@ -221,6 +236,7 @@ export class SolicitudService {
         nino: { include: { solicitante: { include: { usuario: true } } } },
         periodo: true,
         solicitante: { include: { usuario: true } },
+        circulo: true,
         documentos: { where: { validado: true } },
         matricula: { include: { circulo: true } },
       },
@@ -237,6 +253,7 @@ export class SolicitudService {
         nino: { include: { solicitante: { include: { usuario: true } } } },
         periodo: true,
         solicitante: { include: { usuario: true } },
+        circulo: true, // 🔥 NUEVO
         documentos: { include: { validador: true } },
         matricula: { include: { circulo: true, controles: true } },
       },
@@ -259,6 +276,7 @@ export class SolicitudService {
         nino: { include: { solicitante: { include: { usuario: true } } } },
         periodo: true,
         solicitante: { include: { usuario: true } },
+        circulo: true, // 🔥 NUEVO
         documentos: true,
         matricula: { include: { circulo: true } },
       },
@@ -286,6 +304,7 @@ export class SolicitudService {
         nino: { include: { solicitante: { include: { usuario: true } } } },
         periodo: true,
         solicitante: { include: { usuario: true } },
+        circulo: true, // 🔥 NUEVO
         documentos: true,
         matricula: { include: { circulo: true } },
       },
@@ -316,6 +335,7 @@ export class SolicitudService {
         nino: { include: { solicitante: { include: { usuario: true } } } },
         periodo: true,
         solicitante: { include: { usuario: true } },
+        circulo: true, // 🔥 NUEVO
         documentos: true,
         matricula: { include: { circulo: true } },
       },
@@ -335,6 +355,7 @@ export class SolicitudService {
         nino: true,
         solicitante: { include: { usuario: true } },
         periodo: true,
+        circulo: true, // 🔥 NUEVO
       },
     });
     if (!solicitud) {
@@ -347,12 +368,26 @@ export class SolicitudService {
     let estadoCambio = false;
     const estadoAnterior = solicitud.estado;
 
+    // 🔥 Validar círculo si viene en el DTO
+    if (data.circuloId !== undefined && data.circuloId !== null) {
+      const circulo = await this.prisma.circuloInfantil.findUnique({
+        where: { id: data.circuloId },
+      });
+      if (!circulo) {
+        throw new NotFoundException(
+          `Círculo infantil con ID ${data.circuloId} no encontrado`,
+        );
+      }
+    }
+
     if (usuario.rol === RolUsuario.SOLICITANTE) {
       if (data.sector !== undefined) updateData.sector = data.sector;
       if (data.tipoSolicitud !== undefined)
         updateData.tipoSolicitud = data.tipoSolicitud;
       if (data.observaciones !== undefined)
         updateData.observaciones = data.observaciones;
+      // 🔥 El solicitante puede actualizar el círculo
+      if (data.circuloId !== undefined) updateData.circuloId = data.circuloId;
     } else {
       if (data.sector !== undefined) updateData.sector = data.sector;
       if (data.tipoSolicitud !== undefined)
@@ -365,6 +400,8 @@ export class SolicitudService {
       }
       if (data.observaciones !== undefined)
         updateData.observaciones = data.observaciones;
+      // 🔥 Otros roles también pueden actualizar el círculo
+      if (data.circuloId !== undefined) updateData.circuloId = data.circuloId;
     }
 
     const necesitaRecalcular =
@@ -395,6 +432,7 @@ export class SolicitudService {
         nino: true,
         periodo: true,
         solicitante: { include: { usuario: true } },
+        circulo: true, // 🔥 NUEVO
         documentos: true,
         matricula: true,
       },
@@ -446,6 +484,7 @@ export class SolicitudService {
         nino: true,
         solicitante: { include: { usuario: true } },
         periodo: true,
+        circulo: true, // 🔥 NUEVO
       },
     });
     if (!solicitud)
@@ -489,6 +528,7 @@ export class SolicitudService {
         nino: true,
         periodo: true,
         solicitante: { include: { usuario: true } },
+        circulo: true, // 🔥 NUEVO
         documentos: true,
         matricula: true,
       },
@@ -501,7 +541,6 @@ export class SolicitudService {
     nuevoEstado: EstadoSolicitud,
     usuario: any,
     comentario?: string,
-    circuloId?: string,
   ): Promise<SolicitudResponseDto> {
     const solicitud = await this.prisma.solicitud.findUnique({
       where: { id },
@@ -509,6 +548,7 @@ export class SolicitudService {
         nino: true,
         periodo: true,
         solicitante: { include: { usuario: true } },
+        circulo: true,
       },
     });
     if (!solicitud) {
@@ -525,20 +565,11 @@ export class SolicitudService {
 
     const estadoAnterior = solicitud.estado;
 
-    // Crear matrícula si se aprueba por comisión
+    // 🔥 Crear matrícula si se aprueba por comisión (usa el círculo de la solicitud)
     if (nuevoEstado === EstadoSolicitud.APROBADA_COMISION) {
-      if (!circuloId) {
+      if (!solicitud.circuloId || !solicitud.circulo) {
         throw new BadRequestException(
-          'Se requiere círculo para aprobar la solicitud',
-        );
-      }
-
-      const circulo = await this.prisma.circuloInfantil.findUnique({
-        where: { id: circuloId },
-      });
-      if (!circulo) {
-        throw new NotFoundException(
-          `Círculo con ID ${circuloId} no encontrado`,
+          'La solicitud no tiene un círculo asignado. Debe especificarse al crear o actualizar la solicitud antes de aprobar por comisión.',
         );
       }
 
@@ -557,18 +588,18 @@ export class SolicitudService {
       const matricula = await this.prisma.matricula.create({
         data: {
           solicitudId: id,
-          circuloId: circuloId,
-          fechaOtorgamiento: fechaOtorgamiento,
-          fechaLimite: fechaLimite,
+          circuloId: solicitud.circuloId,
+          fechaOtorgamiento,
+          fechaLimite,
           estado: EstadoMatricula.ESPERANDO_ACTIVACION,
           boletaUrl: null,
           folio: await this.generarFolioUnico(),
         },
       });
 
-      // Notificar al director
+      // Notificar al director del círculo
       const director = await this.prisma.perfilDirector.findUnique({
-        where: { circuloId },
+        where: { circuloId: solicitud.circuloId },
         include: { usuario: true },
       });
 
@@ -576,7 +607,7 @@ export class SolicitudService {
         const evento = new MatriculaPendienteActivacionEvent({
           matriculaId: matricula.id,
           folio: matricula.folio,
-          circuloNombre: circulo.nombre,
+          circuloNombre: solicitud.circulo.nombre,
           directorId: director.usuario.id,
           directorEmail: director.usuario.email,
           directorNombre: `${director.usuario.nombre} ${director.usuario.apellidos}`,
@@ -605,6 +636,7 @@ export class SolicitudService {
         nino: true,
         periodo: true,
         solicitante: { include: { usuario: true } },
+        circulo: true, // 🔥 NUEVO
         documentos: true,
         matricula: true,
       },
@@ -628,11 +660,11 @@ export class SolicitudService {
     });
     await this.eventDispatcher.dispatch(evento);
 
-    // 🔥 Retornar la solicitud actualizada (siempre al final)
     return this.toResponseDto(solicitudActualizada);
   }
 
-  // Método auxiliar para calcular días hábiles
+  // ========== Métodos auxiliares ==========
+
   private calcularFechaLimite(fechaInicio: Date, diasHabiles: number): Date {
     const fecha = new Date(fechaInicio);
     let diasAgregados = 0;
@@ -647,9 +679,6 @@ export class SolicitudService {
     return fecha;
   }
 
-  // Método auxiliar para generar folio único (copia del que está en MatriculasService)
-  // Podrías moverlo a un servicio común o duplicarlo aquí por simplicidad.
-  // Recomiendo extraer a un servicio de utilidades, pero para este ejemplo lo duplicaré.
   private async generarFolioUnico(): Promise<string> {
     const fecha = new Date();
     const year = fecha.getFullYear();
@@ -867,6 +896,18 @@ export class SolicitudService {
         municipio: solicitud.solicitante.usuario?.municipio,
         provincia: solicitud.solicitante.usuario?.provincia,
       },
+      // 🔥 NUEVO
+      circulo: solicitud.circulo
+        ? {
+            id: solicitud.circulo.id,
+            nombre: solicitud.circulo.nombre,
+            direccion: solicitud.circulo.direccion,
+            municipio: solicitud.circulo.municipio,
+            provincia: solicitud.circulo.provincia,
+            tipo: solicitud.circulo.tipo,
+            tieneSextoAnio: solicitud.circulo.tieneSextoAnio,
+          }
+        : null,
       documentos:
         solicitud.documentos?.map((doc) => ({
           id: doc.id,

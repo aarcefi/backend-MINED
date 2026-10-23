@@ -20,7 +20,8 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { Roles } from '../../auth/decorators/roles.decorator';
-import { RolUsuario, AnioVida } from '../../common/index';
+import { RolUsuario } from '../../common/index';
+import { AnioVida } from '@prisma/client';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { CapacidadCirculoService } from './capacidad.service';
@@ -118,8 +119,6 @@ export class CapacidadCirculoController {
   findByCirculoId(@Param('circuloId', ParseUUIDPipe) circuloId: string) {
     return this.capacidadService.findByCirculoId(circuloId);
   }
-
-  // NOTA: Se eliminaron los endpoints que dependían de periodoId (findByPeriodoId y findDisponiblesByPeriodo)
 
   @Patch(':id')
   @Roles(RolUsuario.ADMINISTRADOR, RolUsuario.FUNCIONARIO_MUNICIPAL)

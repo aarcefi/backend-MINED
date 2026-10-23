@@ -1,13 +1,8 @@
 import { Injectable } from '@nestjs/common';
+import { AnioVida } from '@prisma/client';
 
-export enum AnioVida {
-  ANIO_1 = 'ANIO_1',
-  ANIO_2 = 'ANIO_2',
-  ANIO_3 = 'ANIO_3',
-  ANIO_4 = 'ANIO_4',
-  ANIO_5 = 'ANIO_5',
-  ANIO_6 = 'ANIO_6',
-}
+// Reexportar el tipo de Prisma para que todo el proyecto use el mismo
+export { AnioVida };
 
 @Injectable()
 export class DateUtilsService {
@@ -15,13 +10,15 @@ export class DateUtilsService {
     fechaNacimiento: Date,
     fechaReferencia: Date,
   ): AnioVida | null {
-    const edadEnMeses =
+    const edadMeses =
       (fechaReferencia.getFullYear() - fechaNacimiento.getFullYear()) * 12 +
       (fechaReferencia.getMonth() - fechaNacimiento.getMonth());
-    const edadEnAnios = Math.floor(edadEnMeses / 12);
-    if (edadEnAnios >= 1 && edadEnAnios <= 6) {
-      return `ANIO_${edadEnAnios}` as AnioVida;
-    }
+
+    if (edadMeses >= 11 && edadMeses < 24) return AnioVida.ANIO_2;
+    if (edadMeses >= 24 && edadMeses < 36) return AnioVida.ANIO_3;
+    if (edadMeses >= 36 && edadMeses < 48) return AnioVida.ANIO_4;
+    if (edadMeses >= 48 && edadMeses < 60) return AnioVida.ANIO_5;
+    if (edadMeses >= 60 && edadMeses < 72) return AnioVida.ANIO_6;
     return null;
   }
 }

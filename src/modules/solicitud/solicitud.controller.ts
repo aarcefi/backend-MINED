@@ -53,10 +53,7 @@ export class SolicitudController {
   @ApiOperation({ summary: 'Crear nueva solicitud' })
   @ApiResponse({ status: 201, description: 'Solicitud creada exitosamente' })
   @ApiResponse({ status: 400, description: 'Datos inválidos' })
-  @ApiResponse({
-    status: 404,
-    description: 'Tutor no encontrado',
-  })
+  @ApiResponse({ status: 404, description: 'Tutor no encontrado' })
   @ApiResponse({
     status: 409,
     description: 'El niño ya tiene una solicitud activa en este período',
@@ -353,26 +350,23 @@ export class SolicitudController {
           example: 'Aprobada por comisión',
           nullable: true,
         },
-        circuloId: {
-          type: 'string',
-          description:
-            'ID del círculo asignado (requerido si el estado es APROBADA_COMISION)',
-          example: '123e4567-e89b-12d3-a456-426614174000',
-          nullable: true,
-        },
       },
       required: ['estado'],
     },
   })
   @ApiResponse({ status: 200, description: 'Estado actualizado' })
-  @ApiResponse({ status: 400, description: 'Estado requerido o falta círculo' })
+  @ApiResponse({ status: 400, description: 'Estado requerido' })
+  @ApiResponse({
+    status: 400,
+    description:
+      'La solicitud no tiene un círculo asignado (requerido para aprobar por comisión)',
+  })
   @ApiResponse({ status: 404, description: 'Solicitud no encontrada' })
   cambiarEstado(
     @Request() req,
     @Param('id', ParseUUIDPipe) id: string,
     @Body('estado') estado: EstadoSolicitud | 'APROBADA' | 'RECHAZADA',
     @Body('comentario') comentario?: string,
-    @Body('circuloId') circuloId?: string,
   ) {
     if (!estado) {
       throw new BadRequestException('El campo "estado" es requerido');
@@ -393,7 +387,6 @@ export class SolicitudController {
       estadoNormalizado,
       req.user,
       comentario,
-      circuloId,
     );
   }
 
@@ -409,8 +402,7 @@ export class SolicitudController {
   @ApiResponse({ status: 404, description: 'Solicitud no encontrada' })
   @ApiResponse({
     status: 409,
-    description:
-      'No se puede eliminar una solicitud con documentos, decisiones o matrícula asociada',
+    description: 'No se puede eliminar una solicitud con matrícula asociada',
   })
   remove(@Request() req, @Param('id', ParseUUIDPipe) id: string) {
     return this.solicitudService.remove(id, req.user);

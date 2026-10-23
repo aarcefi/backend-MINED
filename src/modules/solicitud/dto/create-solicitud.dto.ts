@@ -69,6 +69,15 @@ export class CreateSolicitudDto {
   @IsString()
   observaciones?: string;
 
+  @ApiProperty({
+    description: 'ID del círculo infantil al que se desea matricular al niño',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+    required: false,
+  })
+  @IsOptional()
+  @IsUUID()
+  circuloId?: string;
+
   @ApiProperty()
   @ValidateNested()
   @Type(() => NinoDataDto)

@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import {
   ConflictException,
   forwardRef,
@@ -10,7 +12,7 @@ import { CreatePerfilSolicitanteDto } from './perfil-solicitante/dto/create-perf
 import { CreatePerfilFuncionarioDto } from './perfil-funcionario/dto/create-perfil-funcionario.dto';
 import { CreatePerfilComisionDto } from './perfil-comision/dto/create-perfil-comision.dto';
 import { CreatePerfilDirectorDto } from './perfil-director/create-perfil-director.dto';
-import { RolUsuario } from '@prisma/client';
+import { EstadoSolicitud, RolUsuario } from '@prisma/client';
 import { CirculoInfantilService } from '../circulo-infantil/circulo-infantil.service';
 import { UsuariosService } from '../usuario/usuarios.service';
 
@@ -241,6 +243,87 @@ export class PerfilesService {
         provincia: usuario.provincia,
       },
     }));
+  }
+
+  async getEstadisticasComision(
+    usuarioId: string,
+    fechaDesde?: Date,
+    fechaHasta?: Date,
+  ) {
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id: usuarioId },
+      include: { perfilComision: true },
+    });
+
+    if (!usuario) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+    if (usuario.rol !== RolUsuario.COMISION_OTORGAMIENTO) {
+      throw new NotFoundException(
+        'El usuario no tiene rol de comisión de otorgamiento',
+      );
+    }
+    if (!usuario.perfilComision) {
+      throw new NotFoundException('Perfil de comisión no encontrado');
+    }
+
+    const where: any = {
+      estado: EstadoSolicitud.APROBADA_COMISION,
+      circulo: {
+        is: {
+          municipio: {
+            equals: usuario.municipio,
+            mode: 'insensitive',
+          },
+        },
+      },
+      matricula: {
+        isNot: null,
+      },
+    };
+
+    if (fechaDesde || fechaHasta) {
+      where.matricula = {
+        isNot: null,
+        fechaOtorgamiento: {
+          ...(fechaDesde && { gte: fechaDesde }),
+          ...(fechaHasta && { lte: fechaHasta }),
+        },
+      };
+    }
+
+    const total = await this.prisma.solicitud.count({ where });
+    const grupos = await this.prisma.solicitud.groupBy({
+      by: ['sector'],
+      where,
+      _count: { _all: true },
+    });
+
+    const porSector: Record<string, number> = {
+      SALUD: 0,
+      EDUCACION: 0,
+      DEFENSA: 0,
+      CASO_SOCIAL: 0,
+      OTRO: 0,
+    };
+    grupos.forEach((g) => {
+      porSector[g.sector] = g._count._all;
+    });
+
+    const porcentajes: Record<string, number> = {};
+    Object.keys(porSector).forEach((sector) => {
+      porcentajes[sector] =
+        total > 0 ? Number(((porSector[sector] / total) * 100).toFixed(2)) : 0;
+    });
+
+    return {
+      municipio: usuario.municipio,
+      comisionId: usuario.perfilComision.id,
+      comisionNombre: `${usuario.nombre} ${usuario.apellidos}`,
+      totalSolicitudesAprobadas: total,
+      porSector,
+      porcentajes,
+    };
   }
 
   // PERFIL DIRECTOR

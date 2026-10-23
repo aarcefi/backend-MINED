@@ -1,15 +1,19 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { Controller, Get, Param, UseGuards, Query } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
   ApiBearerAuth,
   ApiQuery,
+  ApiResponse,
 } from '@nestjs/swagger';
 import { PerfilesService } from './perfiles.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { RolUsuario } from '@prisma/client';
+import { GetUser } from 'src/auth/decorators/get-user.decorator';
 
 @ApiTags('Perfiles')
 @ApiBearerAuth()
@@ -60,6 +64,129 @@ export class PerfilesController {
   @ApiQuery({ name: 'municipio', required: true })
   getComisionByMunicipio(@Query('municipio') municipio: string) {
     return this.perfilesService.findComisionByMunicipio(municipio);
+  }
+
+  @Get('comision/estadisticas')
+  @Roles(RolUsuario.COMISION_OTORGAMIENTO)
+  @ApiOperation({
+    summary:
+      'Estadísticas de solicitudes aprobadas por comisión, agrupadas por sector. Solo para el usuario autenticado.',
+  })
+  @ApiQuery({
+    name: 'fechaDesde',
+    required: false,
+    description: 'Filtrar desde fecha de otorgamiento (YYYY-MM-DD)',
+  })
+  @ApiQuery({
+    name: 'fechaHasta',
+    required: false,
+    description: 'Filtrar hasta fecha de otorgamiento (YYYY-MM-DD)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Estadísticas de solicitudes aprobadas por sector',
+    schema: {
+      example: {
+        municipio: 'Plaza',
+        comisionId: 'a1b2c3d4-a1b2-4a1b-8c3d-a1b2c3d4e5f6',
+        comisionNombre: 'Carlos Rodríguez',
+        totalSolicitudesAprobadas: 45,
+        porSector: {
+          SALUD: 10,
+          EDUCACION: 15,
+          DEFENSA: 5,
+          CASO_SOCIAL: 12,
+          OTRO: 3,
+        },
+        porcentajes: {
+          SALUD: 22.22,
+          EDUCACION: 33.33,
+          DEFENSA: 11.11,
+          CASO_SOCIAL: 26.67,
+          OTRO: 6.67,
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Usuario o perfil no encontrado' })
+  @ApiResponse({
+    status: 403,
+    description: 'El usuario no es comisión de otorgamiento',
+  })
+  getEstadisticasComision(
+    @GetUser() usuario: any,
+    @Query('fechaDesde') fechaDesde?: string,
+    @Query('fechaHasta') fechaHasta?: string,
+  ) {
+    return this.perfilesService.getEstadisticasComision(
+      usuario.id,
+      fechaDesde ? new Date(fechaDesde) : undefined,
+      fechaHasta ? new Date(fechaHasta) : undefined,
+    );
+  }
+
+  @Get('comision/:usuarioId/estadisticas') //Solo para Admins
+  @Roles(RolUsuario.ADMINISTRADOR)
+  @ApiOperation({
+    summary:
+      'Estadísticas de solicitudes aprobadas por comisión, agrupadas por sector. Solo para admins.',
+  })
+  @ApiQuery({
+    name: 'usuarioId',
+    required: true,
+    description: 'Id del usuario de la comisión de otorgamiento',
+  })
+  @ApiQuery({
+    name: 'fechaDesde',
+    required: false,
+    description: 'Filtrar desde fecha de otorgamiento (YYYY-MM-DD)',
+  })
+  @ApiQuery({
+    name: 'fechaHasta',
+    required: false,
+    description: 'Filtrar hasta fecha de otorgamiento (YYYY-MM-DD)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Estadísticas de solicitudes aprobadas por sector',
+    schema: {
+      example: {
+        municipio: 'Plaza',
+        comisionId: 'a1b2c3d4-a1b2-4a1b-8c3d-a1b2c3d4e5f6',
+        comisionNombre: 'Carlos Rodríguez',
+        totalSolicitudesAprobadas: 45,
+        porSector: {
+          SALUD: 10,
+          EDUCACION: 15,
+          DEFENSA: 5,
+          CASO_SOCIAL: 12,
+          OTRO: 3,
+        },
+        porcentajes: {
+          SALUD: 22.22,
+          EDUCACION: 33.33,
+          DEFENSA: 11.11,
+          CASO_SOCIAL: 26.67,
+          OTRO: 6.67,
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Usuario o perfil no encontrado' })
+  @ApiResponse({
+    status: 403,
+    description: 'El usuario no es comisión de otorgamiento',
+  })
+  async getEstadisticasComisionPorAdmin(
+    @Param('usuarioId') usuarioId: string,
+    @Query('fechaDesde') fechaDesde?: string,
+    @Query('fechaHasta') fechaHasta?: string,
+  ) {
+    return this.perfilesService.getEstadisticasComision(
+      usuarioId,
+      fechaDesde ? new Date(fechaDesde) : undefined,
+      fechaHasta ? new Date(fechaHasta) : undefined,
+    );
   }
 
   // PERFILES DIRECTOR

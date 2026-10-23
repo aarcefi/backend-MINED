@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-enum-comparison */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import {
@@ -8,11 +7,18 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateCapacidadDto, UpdateCapacidadDto } from './dto';
-import { AnioVida } from '../../common/utils/date-utils.service';
+import { AnioVida } from '@prisma/client';
 
 @Injectable()
 export class CapacidadCirculoService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Calcula la sobrecapacidad como el 120% de la capacidad total (redondeado hacia arriba)
+   */
+  private calcularSobrecapacidad(capacidadTotal: number): number {
+    return Math.ceil(capacidadTotal * 1.2);
+  }
 
   async create(data: CreateCapacidadDto) {
     const circulo = await this.prisma.circuloInfantil.findUnique({
@@ -42,10 +48,14 @@ export class CapacidadCirculoService {
       );
     }
 
+    const sobrecapacidad = this.calcularSobrecapacidad(data.capacidadTotal);
+
     return this.prisma.capacidadCirculo.create({
       data: {
         circuloId: data.circuloId,
         anioVida: data.anioVida,
+        capacidadTotal: data.capacidadTotal,
+        sobrecapacidad: sobrecapacidad,
         cuposDisponibles: data.cuposDisponibles,
         cuposOcupados: data.cuposOcupados,
       },
@@ -90,6 +100,7 @@ export class CapacidadCirculoService {
     });
     if (!capacidad)
       throw new NotFoundException(`Capacidad con ID ${id} no encontrada`);
+
     // Si se cambia el año, validar que no exista conflicto con otro registro
     if (data.anioVida && data.anioVida !== capacidad.anioVida) {
       const existente = await this.prisma.capacidadCirculo.findUnique({
@@ -106,7 +117,19 @@ export class CapacidadCirculoService {
         );
       }
     }
-    return this.prisma.capacidadCirculo.update({ where: { id }, data });
+
+    // Si se cambia capacidadTotal, recalcular sobrecapacidad
+    const updateData: any = { ...data };
+    if (data.capacidadTotal !== undefined) {
+      updateData.sobrecapacidad = this.calcularSobrecapacidad(
+        data.capacidadTotal,
+      );
+    }
+
+    return this.prisma.capacidadCirculo.update({
+      where: { id },
+      data: updateData,
+    });
   }
 
   async updateCupos(id: string, cuposOcupados: number) {
@@ -115,13 +138,23 @@ export class CapacidadCirculoService {
     });
     if (!capacidad)
       throw new NotFoundException(`Capacidad con ID ${id} no encontrada`);
+
     const cuposDisponibles = capacidad.cuposDisponibles - cuposOcupados;
     if (cuposDisponibles < 0)
       throw new BadRequestException('No hay suficientes cupos disponibles');
+
+    // Validar que no se exceda la sobrecapacidad
+    const totalOcupados = capacidad.cuposOcupados + cuposOcupados;
+    if (totalOcupados > capacidad.sobrecapacidad) {
+      throw new BadRequestException(
+        `Se excedería la sobrecapacidad del círculo (${capacidad.sobrecapacidad})`,
+      );
+    }
+
     return this.prisma.capacidadCirculo.update({
       where: { id },
       data: {
-        cuposOcupados: capacidad.cuposOcupados + cuposOcupados,
+        cuposOcupados: totalOcupados,
         cuposDisponibles,
       },
     });
@@ -145,21 +178,27 @@ export class CapacidadCirculoService {
       where: { cuposDisponibles: 0 },
     });
     const cuposTotales = await this.prisma.capacidadCirculo.aggregate({
-      _sum: { cuposDisponibles: true, cuposOcupados: true },
+      _sum: {
+        cuposDisponibles: true,
+        cuposOcupados: true,
+        capacidadTotal: true,
+        sobrecapacidad: true,
+      },
     });
+
+    const capacidadTotal = cuposTotales._sum.capacidadTotal || 0;
+    const cuposOcupados = cuposTotales._sum.cuposOcupados || 0;
+
     return {
       total,
       conCupos,
       sinCupos,
+      capacidadTotalGlobal: capacidadTotal,
+      sobrecapacidadGlobal: cuposTotales._sum.sobrecapacidad || 0,
       cuposDisponiblesTotales: cuposTotales._sum.cuposDisponibles || 0,
-      cuposOcupadosTotales: cuposTotales._sum.cuposOcupados || 0,
+      cuposOcupadosTotales: cuposOcupados,
       ocupacionPorcentaje:
-        cuposTotales._sum.cuposDisponibles && cuposTotales._sum.cuposOcupados
-          ? (cuposTotales._sum.cuposOcupados /
-              (cuposTotales._sum.cuposDisponibles +
-                cuposTotales._sum.cuposOcupados)) *
-            100
-          : 0,
+        capacidadTotal > 0 ? (cuposOcupados / capacidadTotal) * 100 : 0,
     };
   }
 }
