@@ -86,9 +86,6 @@ export class NotificacionesService {
     return this.prisma.notificacion.findMany({
       where: { usuarioId },
       orderBy: { fecha: 'desc' },
-      include: {
-        usuario: true,
-      },
     });
   }
 
@@ -117,10 +114,10 @@ export class NotificacionesService {
     return notificacion;
   }
 
-  async markAsRead(id: string) {
+  async markAsRead(id: string, usuarioId: string) {
     try {
       return await this.prisma.notificacion.update({
-        where: { id },
+        where: { id, usuarioId },
         data: { leida: true },
       });
     } catch (error) {

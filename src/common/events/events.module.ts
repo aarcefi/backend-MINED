@@ -74,24 +74,5 @@ export class EventsModule {
       this.matriculaPendienteEmailObserver,
     );
 
-    // Registrar observadores de matrícula cancelada
-    this.eventDispatcher.register(
-      'matricula.cancelada',
-      this.matriculaCanceladaNotificacionObserver,
-    );
-    this.eventDispatcher.register(
-      'matricula.cancelada',
-      this.matriculaCanceladaEmailObserver,
-    );
-
-    // Registrar observadores de matrícula pendiente de activación (para director)
-    this.eventDispatcher.register(
-      'matricula.pendiente.activacion',
-      this.matriculaPendienteNotificacionObserver,
-    );
-    this.eventDispatcher.register(
-      'matricula.pendiente.activacion',
-      this.matriculaPendienteEmailObserver,
-    );
   }
 }

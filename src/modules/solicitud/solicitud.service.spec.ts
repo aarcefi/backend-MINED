@@ -106,6 +106,8 @@ describe('SolicitudService', () => {
       count: jest.fn(),
     },
     documentoSolicitud: { count: jest.fn() },
+    usuario: { findMany: jest.fn().mockResolvedValue([]) },
+    notificacion: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
     decisionSolicitud: { count: jest.fn() },
     matricula: { count: jest.fn() },
     $transaction: jest.fn().mockImplementation(async (cb) => cb(mockPrisma)),
@@ -576,6 +578,7 @@ describe('SolicitudService', () => {
       });
       const result = await service.update('solicitud-id', updateDto, {
         rol: RolUsuario.FUNCIONARIO_MUNICIPAL,
+        municipio: 'La Habana',
       });
       expect(priorityCalculator.calculatePriority).toHaveBeenCalled();
       expect(result).toHaveProperty(
@@ -628,6 +631,7 @@ describe('SolicitudService', () => {
         { estado: EstadoSolicitud.APROBADA_COMISION },
         {
           rol: RolUsuario.FUNCIONARIO_MUNICIPAL,
+          municipio: 'La Habana',
         },
       );
       expect(eventDispatcher.dispatch).toHaveBeenCalled();
@@ -719,12 +723,15 @@ describe('SolicitudService', () => {
       expect(result.message).toContain('eliminada exitosamente');
     });
 
-    it('should throw ConflictException if tiene documentos', async () => {
-      mockPrisma.solicitud.findUnique.mockResolvedValueOnce(mockSolicitud);
-      mockPrisma.documentoSolicitud.count.mockResolvedValueOnce(1);
-      await expect(
-        service.remove('solicitud-id', { rol: RolUsuario.ADMINISTRADOR }),
-      ).rejects.toThrow(ConflictException);
+    it('should delete solicitud with documentos', async () => {
+      mockPrisma.solicitud.findUnique.mockResolvedValueOnce({
+        ...mockSolicitud,
+        documentos: [],
+      });
+      await service.remove('solicitud-id', { rol: RolUsuario.ADMINISTRADOR });
+      expect(mockPrisma.solicitud.delete).toHaveBeenCalledWith({
+        where: { id: 'solicitud-id' },
+      });
     });
 
     it('should throw ConflictException if tiene decisiones', async () => {
@@ -802,8 +809,21 @@ describe('SolicitudService', () => {
       expect(() =>
         service['verificarPermisosSolicitud'](solicitud, {
           rol: RolUsuario.FUNCIONARIO_MUNICIPAL,
+          municipio: 'La Habana',
         }),
       ).not.toThrow();
+    });
+
+    it('should throw ForbiddenException for FUNCIONARIO_MUNICIPAL with different municipio', () => {
+      const solicitud = {
+        solicitante: { usuario: { municipio: 'La Habana' } },
+      };
+      expect(() =>
+        service['verificarPermisosSolicitud'](solicitud, {
+          rol: RolUsuario.FUNCIONARIO_MUNICIPAL,
+          municipio: 'Otro',
+        }),
+      ).toThrow(ForbiddenException);
     });
 
     it('should verify permisos for COMISION_OTORGAMIENTO', () => {
@@ -813,6 +833,7 @@ describe('SolicitudService', () => {
       expect(() =>
         service['verificarPermisosSolicitud'](solicitud, {
           rol: RolUsuario.COMISION_OTORGAMIENTO,
+          municipio: 'La Habana',
         }),
       ).not.toThrow();
     });

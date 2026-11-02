@@ -1,6 +1,13 @@
 // update-solicitud.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsString, IsOptional, IsUUID } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsString,
+  IsOptional,
+  IsUUID,
+  Min,
+} from 'class-validator';
 import {
   SectorPrioridad,
   TipoSolicitud,
@@ -27,6 +34,12 @@ export class UpdateSolicitudDto {
   @IsOptional()
   @IsString()
   observaciones?: string;
+
+  @ApiProperty({ required: false, description: 'Solo Comisión de Otorgamiento' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  prioridad?: number;
 
   @ApiProperty({
     description: 'ID del círculo infantil al que se desea matricular al niño',

@@ -5,6 +5,16 @@ import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { ConfigService } from '@nestjs/config';
 
+// Los tests de integración vacían tablas con deleteMany: nunca sobre una base real
+export function exigirBaseDePruebas(dbUrl?: string) {
+  const nombre = new URL(dbUrl ?? 'postgresql://x/').pathname.slice(1);
+  if (!/(^|[_-])test$/i.test(nombre)) {
+    throw new Error(
+      `Los tests no pueden usar la base "${nombre}". Define en .env.test una base cuyo nombre termine en _test.`,
+    );
+  }
+}
+
 @Injectable()
 export class PrismaService
   extends PrismaClient
@@ -13,6 +23,10 @@ export class PrismaService
   constructor(private configService: ConfigService) {
     // Usa ConfigService para obtener DATABASE_URL
     const dbUrl = configService.get<string>('DATABASE_URL');
+
+    if (process.env.JEST_WORKER_ID) {
+      exigirBaseDePruebas(dbUrl);
+    }
 
     if (!dbUrl) {
       console.error('❌ ERROR: DATABASE_URL no está definida en .env');

@@ -272,7 +272,7 @@ export class PerfilesService {
       circulo: {
         is: {
           municipio: {
-            equals: usuario.municipio,
+            contains: usuario.municipio,
             mode: 'insensitive',
           },
         },
@@ -284,10 +284,11 @@ export class PerfilesService {
 
     if (fechaDesde || fechaHasta) {
       where.matricula = {
-        isNot: null,
-        fechaOtorgamiento: {
-          ...(fechaDesde && { gte: fechaDesde }),
-          ...(fechaHasta && { lte: fechaHasta }),
+        is: {
+          fechaOtorgamiento: {
+            ...(fechaDesde && { gte: fechaDesde }),
+            ...(fechaHasta && { lte: fechaHasta }),
+          },
         },
       };
     }
@@ -299,13 +300,7 @@ export class PerfilesService {
       _count: { _all: true },
     });
 
-    const porSector: Record<string, number> = {
-      SALUD: 0,
-      EDUCACION: 0,
-      DEFENSA: 0,
-      CASO_SOCIAL: 0,
-      OTRO: 0,
-    };
+    const porSector: Record<string, number> = {};
     grupos.forEach((g) => {
       porSector[g.sector] = g._count._all;
     });

@@ -152,11 +152,8 @@ export class NotificacionesController {
     status: 200,
     description: 'Lista de notificaciones del usuario',
   })
-  findMisNotificaciones(
-    @Request() req,
-    @Query('usuarioId') usuarioId?: string,
-  ) {
-    return this.notificacionesService.findAllByUsuario(usuarioId || req.user.id);
+  findMisNotificaciones(@Request() req) {
+    return this.notificacionesService.findAllByUsuario(req.user.id);
   }
 
   @Get('mis-notificaciones/no-leidas')
@@ -174,13 +171,8 @@ export class NotificacionesController {
     status: 200,
     description: 'Lista de notificaciones no leídas',
   })
-  findMisNotificacionesNoLeidas(
-    @Request() req,
-    @Query('usuarioId') usuarioId?: string,
-  ) {
-    return this.notificacionesService.findUnreadByUsuario(
-      usuarioId || req.user.id,
-    );
+  findMisNotificacionesNoLeidas(@Request() req) {
+    return this.notificacionesService.findUnreadByUsuario(req.user.id);
   }
 
   @Patch('mis-notificaciones/marcar-todas-leidas')
@@ -252,8 +244,8 @@ export class NotificacionesController {
   @ApiParam({ name: 'id', description: 'ID de la notificación' })
   @ApiResponse({ status: 200, description: 'Notificación marcada como leída' })
   @ApiResponse({ status: 404, description: 'Notificación no encontrada' })
-  marcarComoLeida(@Param('id', ParseUUIDPipe) id: string) {
-    return this.notificacionesService.markAsRead(id);
+  marcarComoLeida(@Request() req, @Param('id', ParseUUIDPipe) id: string) {
+    return this.notificacionesService.markAsRead(id, req.user.id);
   }
 
   @Patch('usuario/:usuarioId/marcar-todas-leidas')

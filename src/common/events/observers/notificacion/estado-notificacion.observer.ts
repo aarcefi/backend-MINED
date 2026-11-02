@@ -5,6 +5,7 @@ import { Injectable } from '@nestjs/common';
 import { IObserver } from '../../observer.interface';
 import { IEvent } from '../../event.interface';
 import { NotificacionesService } from '../../../../modules/notificacion/notificaciones.service';
+import { etiquetaEstado } from '../estado-etiquetas';
 
 @Injectable()
 export class NotificacionObserver implements IObserver {
@@ -23,14 +24,14 @@ export class NotificacionObserver implements IObserver {
     } = event.data;
 
     const nombreCompletoNino = `${ninoNombre} ${ninoApellidos}`;
-    let mensaje = `Hola ${nombreSolicitante}, la solicitud de ${nombreCompletoNino} cambió de estado: ${estadoAnterior} → ${estadoNuevo}.`;
+    let mensaje = `Hola ${nombreSolicitante}, la solicitud de ${nombreCompletoNino} cambió de estado: ${etiquetaEstado(estadoAnterior)} → ${etiquetaEstado(estadoNuevo)}.`;
     if (comentario) {
       mensaje += ` Comentario: ${comentario}`;
     }
 
     await this.notificacionesService.createForUsuario(
       event.data.usuarioId,
-      'Cambio de estado en tu solicitud',
+      'Cambio de estado en su solicitud',
       mensaje,
       'ESTADO_SOLICITUD',
     );

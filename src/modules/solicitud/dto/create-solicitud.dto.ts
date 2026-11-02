@@ -9,6 +9,7 @@ import {
   IsDateString,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { TipoPersona } from '@prisma/client';
 import {
   SectorPrioridad,
   TipoSolicitud,
@@ -77,6 +78,16 @@ export class CreateSolicitudDto {
   @IsOptional()
   @IsUUID()
   circuloId?: string;
+
+  @ApiProperty({ enum: TipoPersona, required: false })
+  @IsOptional()
+  @IsEnum(TipoPersona)
+  tipoPersona?: TipoPersona;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  centroTrabajo?: string;
 
   @ApiProperty()
   @ValidateNested()

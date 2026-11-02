@@ -147,6 +147,13 @@ export class SolicitudController {
       municipio = req.user.perfil.municipio;
     }
 
+    if (
+      req.user.rol === RolUsuario.FUNCIONARIO_MUNICIPAL ||
+      req.user.rol === RolUsuario.COMISION_OTORGAMIENTO
+    ) {
+      municipio = req.user.municipio;
+    }
+
     const estadoNormalizado =
       estado === 'APROBADA'
         ? EstadoSolicitud.APROBADA_DIRECCION
@@ -186,7 +193,7 @@ export class SolicitudController {
     const municipio =
       req.user.rol === RolUsuario.DIRECTOR_CIRCULO
         ? req.user.perfil?.municipio
-        : undefined;
+        : req.user.municipio;
     return this.solicitudService.findPendientesRevision(municipio);
   }
 
@@ -350,6 +357,11 @@ export class SolicitudController {
           example: 'Aprobada por comisión',
           nullable: true,
         },
+        circuloId: {
+          type: 'string',
+          description: 'Círculo donde se otorga la plaza al aprobar por comisión',
+          nullable: true,
+        },
       },
       required: ['estado'],
     },
@@ -367,6 +379,7 @@ export class SolicitudController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body('estado') estado: EstadoSolicitud | 'APROBADA' | 'RECHAZADA',
     @Body('comentario') comentario?: string,
+    @Body('circuloId') circuloId?: string,
   ) {
     if (!estado) {
       throw new BadRequestException('El campo "estado" es requerido');
@@ -387,6 +400,7 @@ export class SolicitudController {
       estadoNormalizado,
       req.user,
       comentario,
+      circuloId,
     );
   }
 

@@ -9,23 +9,33 @@ import {
   ParseUUIDPipe,
   Query,
   Request,
+  StreamableFile,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiParam,
   ApiBearerAuth,
+  ApiConsumes,
   ApiQuery,
 } from '@nestjs/swagger';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { RolUsuario, TipoDocumento } from '../../common/index';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
-import { DocumentoService } from './documento.service';
+import {
+  type ArchivoSubido,
+  DocumentoService,
+  TAMANO_MAXIMO_ARCHIVO,
+} from './documento.service';
 import { CreateDocumentoDto } from './dto/create-documento.dto';
 import { UpdateDocumentoDto } from './dto/update-documento.dto';
+import { UploadDocumentoDto } from './dto/upload-documento.dto';
 
 @ApiTags('Documentos de Solicitud')
 @ApiBearerAuth()
@@ -42,6 +52,47 @@ export class DocumentoController {
   @ApiResponse({ status: 404, description: 'Solicitud no encontrada' })
   create(@Body() createDocumentoDto: CreateDocumentoDto) {
     return this.documentoService.create(createDocumentoDto);
+  }
+
+  @Post('upload')
+  @Roles(RolUsuario.SOLICITANTE, RolUsuario.FUNCIONARIO_MUNICIPAL)
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: TAMANO_MAXIMO_ARCHIVO } }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Subir el archivo de un documento de solicitud' })
+  @ApiResponse({ status: 201, description: 'Archivo guardado exitosamente' })
+  @ApiResponse({ status: 400, description: 'Archivo inválido' })
+  @ApiResponse({ status: 403, description: 'La solicitud no es del usuario' })
+  @ApiResponse({ status: 404, description: 'Solicitud no encontrada' })
+  upload(
+    @Request() req,
+    @Body() uploadDocumentoDto: UploadDocumentoDto,
+    @UploadedFile() archivo?: ArchivoSubido,
+  ) {
+    return this.documentoService.upload(uploadDocumentoDto, archivo, req.user);
+  }
+
+  @Get(':id/download')
+  @Roles(
+    RolUsuario.ADMINISTRADOR,
+    RolUsuario.FUNCIONARIO_MUNICIPAL,
+    RolUsuario.COMISION_OTORGAMIENTO,
+    RolUsuario.SOLICITANTE,
+  )
+  @ApiOperation({ summary: 'Descargar el archivo de un documento' })
+  @ApiParam({ name: 'id', description: 'ID del documento' })
+  @ApiResponse({ status: 200, description: 'Archivo del documento' })
+  @ApiResponse({ status: 403, description: 'La solicitud no es del usuario' })
+  @ApiResponse({ status: 404, description: 'Archivo no disponible' })
+  async download(@Request() req, @Param('id', ParseUUIDPipe) id: string) {
+    const { stream, mimeType, nombreArchivo } =
+      await this.documentoService.obtenerArchivo(id, req.user);
+
+    return new StreamableFile(stream, {
+      type: mimeType,
+      disposition: `attachment; filename*=UTF-8''${encodeURIComponent(nombreArchivo)}`,
+    });
   }
 
   @Post('multiple')

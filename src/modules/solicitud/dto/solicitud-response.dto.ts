@@ -78,6 +78,9 @@ export class SolicitudResponseDto {
   @ApiProperty({ type: [DocumentoSolicitudResponseDto], required: false })
   documentos?: DocumentoSolicitudResponseDto[];
 
+  @ApiProperty({ required: false, nullable: true })
+  motivoDenegacion?: string | null;
+
   @ApiProperty({ type: Object, required: false })
   matricula?: any;
 }

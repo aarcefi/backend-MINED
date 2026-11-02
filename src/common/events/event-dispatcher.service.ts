@@ -24,6 +24,14 @@ export class EventDispatcher {
     this.logger.debug(
       `Dispatching event ${eventName} to ${observers.length} observers`,
     );
-    await Promise.all(observers.map((observer) => observer.handle(event)));
+    // Un observador que falla no debe impedir los demás ni la operación de origen
+    const resultados = await Promise.allSettled(
+      observers.map((observer) => observer.handle(event)),
+    );
+    resultados.forEach((resultado) => {
+      if (resultado.status === 'rejected') {
+        this.logger.error(`Error en observador de ${eventName}`, resultado.reason);
+      }
+    });
   }
 }

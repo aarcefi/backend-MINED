@@ -4,6 +4,7 @@ import { Injectable } from '@nestjs/common';
 import { IObserver } from '../../observer.interface';
 import { IEvent } from '../../event.interface';
 import { MailService } from '../../../../mail/mail.service';
+import { etiquetaEstado } from '../estado-etiquetas';
 
 @Injectable()
 export class EmailObserver implements IObserver {
@@ -22,7 +23,7 @@ export class EmailObserver implements IObserver {
         comentario,
       } = event.data;
       const subject = `Actualización de solicitud para ${ninoNombre} ${ninoApellidos}`;
-      const text = `Hola ${nombreSolicitante},\n\nLa solicitud para ${ninoNombre} ${ninoApellidos} ha cambiado de estado: ${estadoAnterior} → ${estadoNuevo}.${comentario ? `\nComentario: ${comentario}` : ''}\n\nPara más detalles, ingresa al sistema.\n\nSaludos cordiales.`;
+      const text = `Hola ${nombreSolicitante},\n\nLa solicitud para ${ninoNombre} ${ninoApellidos} ha cambiado de estado: ${etiquetaEstado(estadoAnterior)} → ${etiquetaEstado(estadoNuevo)}.${comentario ? `\nComentario: ${comentario}` : ''}\n\nPara más detalles, ingresa al sistema.\n\nSaludos cordiales.`;
       await this.mailService.sendCustomEmail(email, subject, text);
     } catch (error) {
       console.error('Error enviando correo electrónico:', error);

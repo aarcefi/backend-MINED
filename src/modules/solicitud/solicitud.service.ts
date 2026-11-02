@@ -40,6 +40,15 @@ import {
   DateUtilsService,
   AnioVida,
 } from '../../common/utils/date-utils.service';
+import { eliminarArchivosDocumentos } from '../documento/documento.service';
+
+const PREFIJO_COMENTARIO_AUTOMATICO = 'Cambio de estado:';
+
+// El municipio es texto libre: "Plaza" y "Plaza de la Revolución" son el mismo
+const mismoMunicipio = (a?: string | null, b?: string | null) => {
+  const [x, y] = [a?.trim().toLowerCase(), b?.trim().toLowerCase()];
+  return !!x && !!y && (x.includes(y) || y.includes(x));
+};
 
 @Injectable()
 export class SolicitudService {
@@ -147,6 +156,16 @@ export class SolicitudService {
     };
     const prioridad = this.priorityCalculator.calculatePriority(context);
 
+    if (data.tipoPersona || data.centroTrabajo !== undefined) {
+      await this.prisma.perfilSolicitante.update({
+        where: { id: data.solicitanteId },
+        data: {
+          tipoPersona: data.tipoPersona,
+          centroTrabajo: data.centroTrabajo,
+        },
+      });
+    }
+
     const solicitud = await this.prisma.solicitud.create({
       data: {
         ninoId: nino.id,
@@ -177,6 +196,13 @@ export class SolicitudService {
       usuario.id,
       'Solicitud creada',
       usuario,
+    );
+
+    await this.notificarPersonal(
+      RolUsuario.FUNCIONARIO_MUNICIPAL,
+      solicitante.usuario.municipio,
+      'Nueva solicitud para revisar',
+      `Se recibió la solicitud de ${nino.nombre} ${nino.apellidos}.`,
     );
 
     return this.toResponseDto(solicitud);
@@ -256,6 +282,18 @@ export class SolicitudService {
         circulo: true, // 🔥 NUEVO
         documentos: { include: { validador: true } },
         matricula: { include: { circulo: true, controles: true } },
+        trazas: {
+          where: {
+            estadoNuevo: {
+              in: [
+                EstadoSolicitud.RECHAZADA_DIRECCION,
+                EstadoSolicitud.RECHAZADA_COMISION,
+              ],
+            },
+          },
+          orderBy: { fecha: 'desc' },
+          take: 1,
+        },
       },
     });
 
@@ -402,6 +440,12 @@ export class SolicitudService {
         updateData.observaciones = data.observaciones;
       // 🔥 Otros roles también pueden actualizar el círculo
       if (data.circuloId !== undefined) updateData.circuloId = data.circuloId;
+      if (
+        data.prioridad !== undefined &&
+        usuario.rol === RolUsuario.COMISION_OTORGAMIENTO
+      ) {
+        updateData.prioridad = data.prioridad;
+      }
     }
 
     const necesitaRecalcular =
@@ -541,6 +585,7 @@ export class SolicitudService {
     nuevoEstado: EstadoSolicitud,
     usuario: any,
     comentario?: string,
+    circuloId?: string,
   ): Promise<SolicitudResponseDto> {
     const solicitud = await this.prisma.solicitud.findUnique({
       where: { id },
@@ -565,11 +610,25 @@ export class SolicitudService {
 
     const estadoAnterior = solicitud.estado;
 
-    // 🔥 Crear matrícula si se aprueba por comisión (usa el círculo de la solicitud)
+    // 🔥 Crear matrícula si se aprueba por comisión: usa el círculo elegido por
+    // la comisión o, si no eligió ninguno, el preferido en la solicitud
     if (nuevoEstado === EstadoSolicitud.APROBADA_COMISION) {
-      if (!solicitud.circuloId || !solicitud.circulo) {
+      let circuloAsignado = solicitud.circulo;
+
+      if (circuloId && circuloId !== solicitud.circuloId) {
+        circuloAsignado = await this.prisma.circuloInfantil.findUnique({
+          where: { id: circuloId },
+        });
+        if (!circuloAsignado?.activo) {
+          throw new NotFoundException(
+            'El círculo seleccionado no existe o no está activo',
+          );
+        }
+      }
+
+      if (!circuloAsignado) {
         throw new BadRequestException(
-          'La solicitud no tiene un círculo asignado. Debe especificarse al crear o actualizar la solicitud antes de aprobar por comisión.',
+          'Debe seleccionar un círculo infantil para otorgar la plaza.',
         );
       }
 
@@ -585,10 +644,17 @@ export class SolicitudService {
       const fechaOtorgamiento = new Date();
       const fechaLimite = this.calcularFechaLimite(fechaOtorgamiento, 5);
 
+      if (circuloAsignado.id !== solicitud.circuloId) {
+        await this.prisma.solicitud.update({
+          where: { id },
+          data: { circuloId: circuloAsignado.id },
+        });
+      }
+
       const matricula = await this.prisma.matricula.create({
         data: {
           solicitudId: id,
-          circuloId: solicitud.circuloId,
+          circuloId: circuloAsignado.id,
           fechaOtorgamiento,
           fechaLimite,
           estado: EstadoMatricula.ESPERANDO_ACTIVACION,
@@ -599,7 +665,7 @@ export class SolicitudService {
 
       // Notificar al director del círculo
       const director = await this.prisma.perfilDirector.findUnique({
-        where: { circuloId: solicitud.circuloId },
+        where: { circuloId: circuloAsignado.id },
         include: { usuario: true },
       });
 
@@ -607,7 +673,7 @@ export class SolicitudService {
         const evento = new MatriculaPendienteActivacionEvent({
           matriculaId: matricula.id,
           folio: matricula.folio,
-          circuloNombre: solicitud.circulo.nombre,
+          circuloNombre: circuloAsignado.nombre,
           directorId: director.usuario.id,
           directorEmail: director.usuario.email,
           directorNombre: `${director.usuario.nombre} ${director.usuario.apellidos}`,
@@ -660,10 +726,41 @@ export class SolicitudService {
     });
     await this.eventDispatcher.dispatch(evento);
 
+    if (nuevoEstado === EstadoSolicitud.APROBADA_DIRECCION) {
+      await this.notificarPersonal(
+        RolUsuario.COMISION_OTORGAMIENTO,
+        solicitanteUsuario.municipio,
+        'Solicitud lista para evaluar',
+        `La Dirección Municipal aprobó la solicitud de ${nino.nombre} ${nino.apellidos}.`,
+      );
+    }
+
     return this.toResponseDto(solicitudActualizada);
   }
 
   // ========== Métodos auxiliares ==========
+
+  // Aviso interno: si falla, la operación principal ya está hecha y no se revierte
+  private async notificarPersonal(
+    rol: RolUsuario,
+    municipio: string,
+    titulo: string,
+    mensaje: string,
+  ) {
+    try {
+      const usuarios = await this.prisma.usuario.findMany({
+        where: { rol, activo: true },
+        select: { id: true, municipio: true },
+      });
+      await this.prisma.notificacion.createMany({
+        data: usuarios
+          .filter((u) => mismoMunicipio(u.municipio, municipio))
+          .map((u) => ({ usuarioId: u.id, titulo, mensaje, tipo: 'SISTEMA' })),
+      });
+    } catch (error) {
+      this.logger.error('No se pudo notificar al personal', error);
+    }
+  }
 
   private calcularFechaLimite(fechaInicio: Date, diasHabiles: number): Date {
     const fecha = new Date(fechaInicio);
@@ -700,7 +797,10 @@ export class SolicitudService {
   async remove(id: string, usuario: any): Promise<{ message: string }> {
     const solicitud = await this.prisma.solicitud.findUnique({
       where: { id },
-      include: { solicitante: { include: { usuario: true } } },
+      include: {
+        solicitante: { include: { usuario: true } },
+        documentos: { select: { archivoUrl: true } },
+      },
     });
     if (!solicitud) {
       throw new NotFoundException(`Solicitud con ID ${id} no encontrada`);
@@ -708,10 +808,15 @@ export class SolicitudService {
 
     this.verificarPermisosSolicitud(solicitud, usuario);
 
-    const tieneDocumentos =
-      (await this.prisma.documentoSolicitud.count({
-        where: { solicitudId: id },
-      })) > 0;
+    if (
+      usuario?.rol === RolUsuario.SOLICITANTE &&
+      solicitud.estado !== EstadoSolicitud.EN_REVISION
+    ) {
+      throw new ConflictException(
+        'Solo se puede retirar una solicitud que sigue en revisión',
+      );
+    }
+
     const tieneDecisiones =
       (await this.prisma.decisionSolicitud.count({
         where: { solicitudId: id },
@@ -719,13 +824,16 @@ export class SolicitudService {
     const tieneMatricula =
       (await this.prisma.matricula.count({ where: { solicitudId: id } })) > 0;
 
-    if (tieneDocumentos || tieneDecisiones || tieneMatricula) {
+    if (tieneDecisiones || tieneMatricula) {
       throw new ConflictException(
-        'No se puede eliminar una solicitud con documentos, decisiones o matrícula asociada',
+        'No se puede eliminar una solicitud con decisiones o matrícula asociada',
       );
     }
 
     await this.prisma.solicitud.delete({ where: { id } });
+    await eliminarArchivosDocumentos(
+      solicitud.documentos.map((documento) => documento.archivoUrl),
+    );
     return { message: `Solicitud con ID ${id} eliminada exitosamente` };
   }
 
@@ -759,18 +867,12 @@ export class SolicitudService {
       RECHAZADA_DIRECCION: 0,
       EN_ESPERA: 0,
     };
-    const porSector = {
-      SALUD: 0,
-      EDUCACION: 0,
-      DEFENSA: 0,
-      CASO_SOCIAL: 0,
-      OTRO: 0,
-    };
+    const porSector: Record<string, number> = {};
     const porTipo = { TRABAJADOR: 0, ESTUDIANTE: 0, CASO_SOCIAL: 0 };
 
     solicitudes.forEach((s) => {
       porEstado[s.estado]++;
-      porSector[s.sector]++;
+      porSector[s.sector] = (porSector[s.sector] ?? 0) + 1;
       porTipo[s.tipoSolicitud]++;
     });
 
@@ -806,14 +908,25 @@ export class SolicitudService {
   // ========== Métodos privados ==========
 
   private verificarPermisosSolicitud(solicitud: any, usuario: any): void {
-    if (
-      [RolUsuario.ADMINISTRADOR, RolUsuario.FUNCIONARIO_MUNICIPAL].includes(
-        usuario?.rol,
-      )
-    ) {
+    if (usuario?.rol === RolUsuario.ADMINISTRADOR) {
       return;
     }
-    if (usuario?.rol === RolUsuario.COMISION_OTORGAMIENTO) {
+    if (
+      [
+        RolUsuario.FUNCIONARIO_MUNICIPAL,
+        RolUsuario.COMISION_OTORGAMIENTO,
+      ].includes(usuario?.rol)
+    ) {
+      if (
+        !mismoMunicipio(
+          solicitud.solicitante.usuario?.municipio,
+          usuario.municipio,
+        )
+      ) {
+        throw new ForbiddenException(
+          'Solo puedes acceder a solicitudes de tu municipio',
+        );
+      }
       return;
     }
     if (usuario?.rol === RolUsuario.DIRECTOR_CIRCULO && usuario.perfil) {
@@ -837,6 +950,13 @@ export class SolicitudService {
     throw new ForbiddenException(
       'No tienes permiso para acceder a esta solicitud',
     );
+  }
+
+  private obtenerMotivoDenegacion(solicitud: any): string | null {
+    const comentario: string | undefined = solicitud.trazas?.[0]?.comentario;
+    return comentario && !comentario.startsWith(PREFIJO_COMENTARIO_AUTOMATICO)
+      ? comentario
+      : null;
   }
 
   private toResponseDto(solicitud: any): SolicitudResponseDto {
@@ -911,11 +1031,12 @@ export class SolicitudService {
       documentos:
         solicitud.documentos?.map((doc) => ({
           id: doc.id,
-          tipo: doc.tipo,
-          url: doc.url,
+          tipo: doc.tipoDocumento,
+          nombreArchivo: doc.nombreArchivo,
           validado: doc.validado,
         })) || [],
       matricula: solicitud.matricula || null,
+      motivoDenegacion: this.obtenerMotivoDenegacion(solicitud),
     };
   }
 }
