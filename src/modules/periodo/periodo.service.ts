@@ -4,43 +4,82 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreatePeriodoDto, UpdatePeriodoDto } from './dto';
+import { aFecha, estaVigente, formatoFecha, hoy } from './fechas';
 
 @Injectable()
 export class PeriodoService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(data: CreatePeriodoDto) {
-    const periodosSuperpuestos = await this.prisma.periodoOtorgamiento.findMany(
-      {
-        where: {
-          activo: true,
-          OR: [
-            {
-              fechaInicio: { lte: new Date(data.fechaCierre) },
-              fechaCierre: { gte: new Date(data.fechaInicio) },
-            },
-          ],
-        },
-      },
-    );
+    const fechas = this.validarFechas(data);
+    await this.verificarSolapamiento(fechas);
 
-    if (periodosSuperpuestos.length > 0) {
-      throw new ConflictException(
-        'Ya existe un período activo en las fechas seleccionadas',
+    // Un período nuevo solo nace activo si hoy está dentro de sus fechas
+    const activo = estaVigente(fechas);
+
+    return this.prisma.$transaction(async (tx) => {
+      if (activo) {
+        await tx.periodoOtorgamiento.updateMany({
+          where: { activo: true },
+          data: { activo: false },
+        });
+      }
+      return tx.periodoOtorgamiento.create({
+        data: { nombre: data.nombre.trim(), ...fechas, activo },
+      });
+    });
+  }
+
+  /** Normaliza las fechas y comprueba el orden inicio → cierre → asignación. */
+  private validarFechas(data: {
+    fechaInicio: string | Date;
+    fechaCierre: string | Date;
+    fechaAsignacion: string | Date;
+  }) {
+    const fechaInicio = aFecha(data.fechaInicio);
+    const fechaCierre = aFecha(data.fechaCierre);
+    const fechaAsignacion = aFecha(data.fechaAsignacion);
+
+    if ([fechaInicio, fechaCierre, fechaAsignacion].some((f) => isNaN(+f))) {
+      throw new BadRequestException('Alguna de las fechas no es válida');
+    }
+    if (fechaCierre <= fechaInicio) {
+      throw new BadRequestException(
+        'La fecha de cierre debe ser posterior a la fecha de inicio',
       );
     }
+    if (fechaAsignacion <= fechaCierre) {
+      throw new BadRequestException(
+        'La fecha de asignación debe ser posterior a la fecha de cierre',
+      );
+    }
+    return { fechaInicio, fechaCierre, fechaAsignacion };
+  }
 
-    return this.prisma.periodoOtorgamiento.create({
-      data: {
-        ...data,
-        fechaInicio: new Date(data.fechaInicio),
-        fechaCierre: new Date(data.fechaCierre),
-        fechaAsignacion: new Date(data.fechaAsignacion),
+  /** Dos períodos no pueden compartir ningún día de recepción de solicitudes. */
+  private async verificarSolapamiento(
+    fechas: { fechaInicio: Date; fechaCierre: Date },
+    excluirId?: string,
+  ) {
+    const otro = await this.prisma.periodoOtorgamiento.findFirst({
+      where: {
+        ...(excluirId && { id: { not: excluirId } }),
+        fechaInicio: { lte: fechas.fechaCierre },
+        fechaCierre: { gte: fechas.fechaInicio },
       },
+      orderBy: { fechaInicio: 'asc' },
     });
+
+    if (otro) {
+      throw new ConflictException(
+        `Las fechas se solapan con el período "${otro.nombre}" ` +
+          `(${formatoFecha(otro.fechaInicio)} – ${formatoFecha(otro.fechaCierre)})`,
+      );
+    }
   }
 
   async findAll(filtros?: {
@@ -77,6 +116,7 @@ export class PeriodoService {
     return this.prisma.periodoOtorgamiento.findMany({
       where,
       include: {
+        _count: { select: { solicitudes: true, sesiones: true } },
         solicitudes: {
           include: {
             nino: true,
@@ -147,27 +187,31 @@ export class PeriodoService {
       throw new NotFoundException(`Período con ID ${id} no encontrado`);
     }
 
-    const updateData: any = { ...data };
+    const fechas = this.validarFechas({
+      fechaInicio: data.fechaInicio ?? periodo.fechaInicio,
+      fechaCierre: data.fechaCierre ?? periodo.fechaCierre,
+      fechaAsignacion: data.fechaAsignacion ?? periodo.fechaAsignacion,
+    });
+    await this.verificarSolapamiento(fechas, id);
 
-    if (data.fechaInicio) {
-      updateData.fechaInicio = new Date(data.fechaInicio);
-    }
-
-    if (data.fechaCierre) {
-      updateData.fechaCierre = new Date(data.fechaCierre);
-    }
-
-    if (data.fechaAsignacion) {
-      updateData.fechaAsignacion = new Date(data.fechaAsignacion);
-    }
+    // Si las nuevas fechas dejan fuera el día de hoy, deja de estar activo
+    const activo = periodo.activo && estaVigente(fechas);
 
     return this.prisma.periodoOtorgamiento.update({
       where: { id },
-      data: updateData,
+      data: {
+        ...(data.nombre !== undefined && { nombre: data.nombre.trim() }),
+        ...fechas,
+        activo,
+      },
     });
   }
 
   async toggleActivo(id: string, activo: boolean) {
+    if (typeof activo !== 'boolean') {
+      throw new BadRequestException('El campo "activo" debe ser true o false');
+    }
+
     const periodo = await this.prisma.periodoOtorgamiento.findUnique({
       where: { id },
     });
@@ -176,46 +220,64 @@ export class PeriodoService {
       throw new NotFoundException(`Período con ID ${id} no encontrado`);
     }
 
-    // Si se está activando, desactivar otros períodos activos
-    if (activo) {
-      await this.prisma.periodoOtorgamiento.updateMany({
-        where: {
-          id: { not: id },
-          activo: true,
-        },
+    if (!activo) {
+      return this.prisma.periodoOtorgamiento.update({
+        where: { id },
         data: { activo: false },
       });
     }
 
-    return this.prisma.periodoOtorgamiento.update({
-      where: { id },
-      data: { activo },
+    // Solo puede estar activo el período que cubre el día de hoy
+    if (!estaVigente(periodo)) {
+      throw new BadRequestException(
+        `Solo se puede activar un período vigente. "${periodo.nombre}" va del ` +
+          `${formatoFecha(periodo.fechaInicio)} al ${formatoFecha(periodo.fechaCierre)}`,
+      );
+    }
+
+    // Activar uno desactiva los demás, en la misma transacción
+    return this.prisma.$transaction(async (tx) => {
+      await tx.periodoOtorgamiento.updateMany({
+        where: { id: { not: id }, activo: true },
+        data: { activo: false },
+      });
+      return tx.periodoOtorgamiento.update({
+        where: { id },
+        data: { activo: true },
+      });
     });
   }
 
   async remove(id: string) {
     const periodo = await this.prisma.periodoOtorgamiento.findUnique({
       where: { id },
+      include: { _count: { select: { solicitudes: true, sesiones: true } } },
     });
 
     if (!periodo) {
       throw new NotFoundException(`Período con ID ${id} no encontrado`);
     }
 
-    // Verificar que no tenga solicitudes asociadas
-    const solicitudesCount = await this.prisma.solicitud.count({
-      where: { periodoId: id },
-    });
-
-    if (solicitudesCount > 0) {
+    if (periodo.activo) {
       throw new ConflictException(
-        'No se puede eliminar un período con solicitudes asociadas',
+        'No se puede eliminar el período activo. Desactívelo primero',
       );
     }
 
-    return this.prisma.periodoOtorgamiento.delete({
-      where: { id },
-    });
+    // Borrar el período borraría en cascada sus solicitudes y sesiones
+    const { solicitudes, sesiones } = periodo._count;
+    if (solicitudes > 0 || sesiones > 0) {
+      const partes = [
+        solicitudes > 0 && `${solicitudes} solicitud(es)`,
+        sesiones > 0 && `${sesiones} sesión(es) de la comisión`,
+      ].filter(Boolean);
+      throw new ConflictException(
+        `No se puede eliminar el período porque tiene ${partes.join(' y ')} asociadas`,
+      );
+    }
+
+    await this.prisma.periodoOtorgamiento.delete({ where: { id } });
+    return { message: `Período "${periodo.nombre}" eliminado` };
   }
 
   async getEstadisticas(id: string) {
@@ -298,8 +360,7 @@ export class PeriodoService {
   }
 
   public async obtenerPeriodoActivo(fecha: Date) {
-    const startOfDay = new Date(fecha);
-    startOfDay.setHours(0, 0, 0, 0);
+    const startOfDay = hoy(fecha);
 
     const periodo = await this.prisma.periodoOtorgamiento.findFirst({
       where: {

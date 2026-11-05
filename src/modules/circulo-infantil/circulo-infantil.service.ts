@@ -1,22 +1,160 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import {
+  BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { CreateCirculoInfantilDto, UpdateCirculoInfantilDto } from './dto';
-import { RolUsuario, TipoCirculo } from '@prisma/client';
+import {
+  CapacidadAnioDto,
+  CreateCirculoInfantilDto,
+  UpdateCirculoInfantilDto,
+} from './dto';
+import {
+  AnioVida,
+  CapacidadCirculo,
+  Prisma,
+  RolUsuario,
+  TipoCirculo,
+} from '@prisma/client';
+
+const NOMBRE_ANIO: Record<AnioVida, string> = {
+  ANIO_2: '2do año de vida',
+  ANIO_3: '3er año de vida',
+  ANIO_4: '4to año de vida',
+  ANIO_5: '5to año de vida',
+  ANIO_6: '6to año de vida',
+};
+
+/** Igual que en CapacidadCirculoService: 120 % de la capacidad nominal. */
+const sobrecapacidad = (capacidadTotal: number) =>
+  Math.ceil(capacidadTotal * 1.2);
 
 @Injectable()
 export class CirculoInfantilService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /** Solo los campos propios del círculo; nada que el cliente cuele de más. */
+  private camposCirculo(data: UpdateCirculoInfantilDto) {
+    const campos = {
+      nombre: data.nombre?.trim(),
+      direccion: data.direccion?.trim(),
+      municipio: data.municipio?.trim(),
+      provincia: data.provincia?.trim(),
+      capacidadTotal: data.capacidadTotal,
+      tipo: data.tipo,
+      activo: data.activo,
+      tieneSextoAnio: data.tieneSextoAnio,
+      telefono:
+        data.telefono === undefined ? undefined : data.telefono?.trim() || null,
+    };
+    return Object.fromEntries(
+      Object.entries(campos).filter(([, v]) => v !== undefined),
+    ) as Prisma.CirculoInfantilUpdateInput;
+  }
+
   async create(data: CreateCirculoInfantilDto) {
-    return this.prisma.circuloInfantil.create({
-      data: { ...data, tieneSextoAnio: data.tieneSextoAnio ?? false },
+    const circulo = {
+      ...(this.camposCirculo(data) as Prisma.CirculoInfantilCreateInput),
+      tieneSextoAnio: data.tieneSextoAnio ?? false,
+    };
+    return this.prisma.$transaction(async (tx) => {
+      const creado = await tx.circuloInfantil.create({ data: circulo });
+      if (data.capacidades) {
+        await this.sincronizarCapacidades(tx, creado, [], data.capacidades);
+      }
+      return creado;
     });
+  }
+
+  /**
+   * Deja las capacidades del círculo como indica `deseadas` (si viene) y
+   * comprueba que encajen con el círculo: sin 6to año si no lo ofrece, sin
+   * bajar de los niños ya matriculados y sin pasar de la capacidad total.
+   */
+  private async sincronizarCapacidades(
+    tx: Prisma.TransactionClient,
+    circulo: { id: string; capacidadTotal: number; tieneSextoAnio: boolean },
+    actuales: CapacidadCirculo[],
+    deseadas?: CapacidadAnioDto[],
+    comprobarSuma = true,
+  ) {
+    const porAnio = new Map<AnioVida, number>();
+    if (deseadas) {
+      for (const c of deseadas) {
+        if (porAnio.has(c.anioVida)) {
+          throw new BadRequestException(
+            `El ${NOMBRE_ANIO[c.anioVida]} aparece repetido`,
+          );
+        }
+        if (c.capacidadTotal > 0) porAnio.set(c.anioVida, c.capacidadTotal);
+      }
+    } else {
+      for (const c of actuales) porAnio.set(c.anioVida, c.capacidadTotal);
+    }
+
+    // Sin sexto año, su capacidad sobra
+    if (!circulo.tieneSextoAnio && porAnio.has(AnioVida.ANIO_6)) {
+      if (deseadas) {
+        throw new BadRequestException(
+          'Este círculo no ofrece el 6to año de vida: marque "Tiene sexto año de vida" o deje esa capacidad vacía',
+        );
+      }
+      porAnio.delete(AnioVida.ANIO_6);
+    }
+
+    for (const actual of actuales) {
+      const nueva = porAnio.get(actual.anioVida) ?? 0;
+      if (nueva < actual.cuposOcupados) {
+        throw new ConflictException(
+          `El ${NOMBRE_ANIO[actual.anioVida]} tiene ${actual.cuposOcupados} ` +
+            `niño(s) matriculado(s); su capacidad no puede ser menor que ${actual.cuposOcupados}`,
+        );
+      }
+    }
+
+    // Con datos antiguos descuadrados, editar solo el teléfono no debe fallar:
+    // la suma se revisa al tocar las capacidades o la capacidad total
+    const suma = [...porAnio.values()].reduce((a, b) => a + b, 0);
+    if (comprobarSuma && suma > circulo.capacidadTotal) {
+      throw new BadRequestException(
+        `La suma de las capacidades por año (${suma}) supera la capacidad total del círculo (${circulo.capacidadTotal})`,
+      );
+    }
+
+    for (const actual of actuales) {
+      const nueva = porAnio.get(actual.anioVida);
+      if (nueva === undefined) {
+        await tx.capacidadCirculo.delete({ where: { id: actual.id } });
+      } else if (nueva !== actual.capacidadTotal) {
+        await tx.capacidadCirculo.update({
+          where: { id: actual.id },
+          data: {
+            capacidadTotal: nueva,
+            sobrecapacidad: sobrecapacidad(nueva),
+            cuposDisponibles: nueva - actual.cuposOcupados,
+          },
+        });
+      }
+    }
+
+    const existentes = new Set(actuales.map((c) => c.anioVida));
+    for (const [anioVida, capacidadTotal] of porAnio) {
+      if (existentes.has(anioVida)) continue;
+      await tx.capacidadCirculo.create({
+        data: {
+          circuloId: circulo.id,
+          anioVida,
+          capacidadTotal,
+          sobrecapacidad: sobrecapacidad(capacidadTotal),
+          cuposDisponibles: capacidadTotal,
+          cuposOcupados: 0,
+        },
+      });
+    }
   }
 
   async findAll(filtros?: {
@@ -193,7 +331,7 @@ export class CirculoInfantilService {
 
     // 3. Obtener matrículas y contar por año
     const matriculas = await this.prisma.matricula.findMany({
-      where: { circuloId },
+      where: { circuloId, estado: 'ACTIVA' },
       include: {
         solicitud: {
           select: {
@@ -250,13 +388,39 @@ export class CirculoInfantilService {
     });
     if (!circulo)
       throw new NotFoundException(`Círculo con ID ${id} no encontrado`);
-    return this.prisma.circuloInfantil.update({
-      where: { id },
-      data: { ...data, tieneSextoAnio: data.tieneSextoAnio },
+
+    const campos = this.camposCirculo(data);
+    const final = {
+      id,
+      capacidadTotal: data.capacidadTotal ?? circulo.capacidadTotal,
+      tieneSextoAnio: data.tieneSextoAnio ?? circulo.tieneSextoAnio,
+    };
+
+    // Círculo y capacidades se guardan juntos o no se guarda nada
+    return this.prisma.$transaction(async (tx) => {
+      const actuales = await tx.capacidadCirculo.findMany({
+        where: { circuloId: id },
+      });
+      await this.sincronizarCapacidades(
+        tx,
+        final,
+        actuales,
+        data.capacidades,
+        data.capacidades !== undefined ||
+          final.capacidadTotal !== circulo.capacidadTotal,
+      );
+      return tx.circuloInfantil.update({
+        where: { id },
+        data: campos,
+        include: { capacidades: { orderBy: { anioVida: 'asc' } } },
+      });
     });
   }
 
   async toggleActivo(id: string, activo: boolean) {
+    if (typeof activo !== 'boolean') {
+      throw new BadRequestException('El campo "activo" debe ser true o false');
+    }
     const circulo = await this.prisma.circuloInfantil.findUnique({
       where: { id },
     });
@@ -268,19 +432,56 @@ export class CirculoInfantilService {
     });
   }
 
+  /**
+   * Solo se borra un círculo sin historia. Borrarlo con datos haría que la
+   * base eliminara en cascada matrículas y el perfil del director, dejara
+   * solicitudes sin círculo o fallara por los traslados; en esos casos se
+   * pide desactivarlo, que conserva todo y deja de ofrecerlo.
+   * Las capacidades por año son configuración y se borran con el círculo.
+   */
   async remove(id: string) {
     const circulo = await this.prisma.circuloInfantil.findUnique({
       where: { id },
+      include: {
+        director: { select: { id: true } },
+        _count: {
+          select: {
+            matriculas: true,
+            solicitudes: true,
+            trasladosOrigen: true,
+            trasladosDestino: true,
+          },
+        },
+      },
     });
     if (!circulo)
       throw new NotFoundException(`Círculo con ID ${id} no encontrado`);
 
-    const matriculasActivas = await this.prisma.matricula.count({
-      where: { circuloId: id, estado: 'ACTIVA' },
-    });
-    if (matriculasActivas > 0) {
-      throw new Error('No se puede eliminar un círculo con matrículas activas');
+    const { matriculas, solicitudes, trasladosOrigen, trasladosDestino } =
+      circulo._count;
+    const traslados = trasladosOrigen + trasladosDestino;
+    const motivos = [
+      matriculas > 0 && `${matriculas} matrícula(s)`,
+      solicitudes > 0 && `${solicitudes} solicitud(es)`,
+      traslados > 0 && `${traslados} traslado(s)`,
+      circulo.director && 'un director asignado',
+    ].filter(Boolean) as string[];
+
+    if (motivos.length > 0) {
+      const lista =
+        motivos.length > 1
+          ? `${motivos.slice(0, -1).join(', ')} y ${motivos.at(-1)}`
+          : motivos[0];
+      throw new ConflictException(
+        `No se puede eliminar "${circulo.nombre}" porque tiene ${lista}. ` +
+          'Desactívelo para que deje de recibir solicitudes sin perder su historial',
+      );
     }
-    return this.prisma.circuloInfantil.delete({ where: { id } });
+
+    await this.prisma.$transaction([
+      this.prisma.capacidadCirculo.deleteMany({ where: { circuloId: id } }),
+      this.prisma.circuloInfantil.delete({ where: { id } }),
+    ]);
+    return { message: `Círculo "${circulo.nombre}" eliminado` };
   }
 }

@@ -41,14 +41,20 @@ import {
   AnioVida,
 } from '../../common/utils/date-utils.service';
 import { eliminarArchivosDocumentos } from '../documento/documento.service';
+import { mismoMunicipio } from '../../common/utils/municipio';
 
 const PREFIJO_COMENTARIO_AUTOMATICO = 'Cambio de estado:';
 
-// El municipio es texto libre: "Plaza" y "Plaza de la Revolución" son el mismo
-const mismoMunicipio = (a?: string | null, b?: string | null) => {
-  const [x, y] = [a?.trim().toLowerCase(), b?.trim().toLowerCase()];
-  return !!x && !!y && (x.includes(y) || y.includes(x));
-};
+// Se filtra después de la consulta porque la coincidencia va en los dos sentidos
+const delMunicipio = <T extends { solicitante?: any }>(
+  solicitudes: T[],
+  municipio?: string,
+) =>
+  municipio
+    ? solicitudes.filter((s) =>
+        mismoMunicipio(s.solicitante?.usuario?.municipio, municipio),
+      )
+    : solicitudes;
 
 @Injectable()
 export class SolicitudService {
@@ -104,11 +110,15 @@ export class SolicitudService {
     });
 
     if (!nino) {
-      await this.validacionFichaUnica.verificarCarnetIdentidad(
+      // El carnet debe estar en el registro de identidad y el nombre sale de ahí,
+      // no de lo que envíe el formulario
+      const ciudadano = await this.validacionFichaUnica.obtenerNombre(
         data.nino.tarjetaMenor,
       );
       const createNinoDto: CreateNinoDto = {
         ...data.nino,
+        nombre: ciudadano.nombre ?? data.nino.nombre,
+        apellidos: ciudadano.apellidos ?? data.nino.apellidos,
         solicitanteId: data.solicitanteId,
       };
       nino = await this.ninosService.create(createNinoDto);
@@ -231,24 +241,10 @@ export class SolicitudService {
     if (filtros?.solicitanteId) where.solicitanteId = filtros.solicitanteId;
     if (filtros?.ninoId) where.ninoId = filtros.ninoId;
 
-    if (filtros?.municipio) {
-      where.solicitante = {
-        usuario: {
-          municipio: { contains: filtros.municipio, mode: 'insensitive' },
-        },
-      };
-    }
-
-    if (usuario?.rol === RolUsuario.DIRECTOR_CIRCULO && usuario.perfil) {
-      where.solicitante = {
-        usuario: {
-          municipio: {
-            contains: usuario.perfil.municipio,
-            mode: 'insensitive',
-          },
-        },
-      };
-    }
+    const municipio =
+      usuario?.rol === RolUsuario.DIRECTOR_CIRCULO && usuario.perfil
+        ? usuario.perfil.municipio
+        : filtros?.municipio;
 
     if (filtros?.fechaDesde || filtros?.fechaHasta) {
       where.fechaSolicitud = {};
@@ -269,7 +265,9 @@ export class SolicitudService {
       orderBy: [{ prioridad: 'desc' }, { fechaSolicitud: 'asc' }],
     });
 
-    return solicitudes.map((s) => this.toResponseDto(s));
+    return delMunicipio(solicitudes, municipio).map((s) =>
+      this.toResponseDto(s),
+    );
   }
 
   async findOne(id: string, usuario?: any): Promise<SolicitudResponseDto> {
@@ -359,13 +357,6 @@ export class SolicitudService {
       estado: 'EN_REVISION',
       documentos: { every: { validado: true } },
     };
-    if (municipio) {
-      where.solicitante = {
-        usuario: {
-          municipio: { contains: municipio, mode: 'insensitive' },
-        },
-      };
-    }
 
     const solicitudes = await this.prisma.solicitud.findMany({
       where,
@@ -379,7 +370,9 @@ export class SolicitudService {
       },
       orderBy: { prioridad: 'desc' },
     });
-    return solicitudes.map((s) => this.toResponseDto(s));
+    return delMunicipio(solicitudes, municipio).map((s) =>
+      this.toResponseDto(s),
+    );
   }
 
   async update(
@@ -908,15 +901,13 @@ export class SolicitudService {
   // ========== Métodos privados ==========
 
   private verificarPermisosSolicitud(solicitud: any, usuario: any): void {
-    if (usuario?.rol === RolUsuario.ADMINISTRADOR) {
+    if (
+      usuario?.rol === RolUsuario.ADMINISTRADOR ||
+      usuario?.rol === RolUsuario.COMISION_OTORGAMIENTO
+    ) {
       return;
     }
-    if (
-      [
-        RolUsuario.FUNCIONARIO_MUNICIPAL,
-        RolUsuario.COMISION_OTORGAMIENTO,
-      ].includes(usuario?.rol)
-    ) {
+    if ([RolUsuario.FUNCIONARIO_MUNICIPAL].includes(usuario?.rol)) {
       if (
         !mismoMunicipio(
           solicitud.solicitante.usuario?.municipio,

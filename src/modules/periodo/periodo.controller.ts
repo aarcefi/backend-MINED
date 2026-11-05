@@ -40,7 +40,7 @@ export class PeriodoOtorgamientoController {
   @ApiResponse({ status: 400, description: 'Datos inválidos' })
   @ApiResponse({
     status: 409,
-    description: 'Ya existe un período activo en las fechas seleccionadas',
+    description: 'Las fechas se solapan con otro período',
   })
   create(@Body() dto: CreatePeriodoDto) {
     return this.service.create(dto);
@@ -77,13 +77,14 @@ export class PeriodoOtorgamientoController {
   })
   @ApiResponse({ status: 200, description: 'Lista de períodos' })
   findAll(
-    @Query('activo') activo?: boolean,
+    @Query('activo') activo?: string,
     @Query('nombre') nombre?: string,
     @Query('fechaInicioDesde') fechaInicioDesde?: string,
     @Query('fechaInicioHasta') fechaInicioHasta?: string,
   ) {
     return this.service.findAll({
-      activo: activo !== undefined ? Boolean(activo) : undefined,
+      // Los query params llegan como texto: Boolean('false') sería true
+      activo: activo === 'true' ? true : activo === 'false' ? false : undefined,
       nombre,
       fechaInicioDesde: fechaInicioDesde
         ? new Date(fechaInicioDesde)
@@ -162,6 +163,7 @@ export class PeriodoOtorgamientoController {
   @ApiOperation({ summary: 'Activar/desactivar período' })
   @ApiParam({ name: 'id', description: 'ID del período' })
   @ApiResponse({ status: 200, description: 'Estado actualizado' })
+  @ApiResponse({ status: 400, description: 'El período no está vigente hoy' })
   @ApiResponse({ status: 404, description: 'Período no encontrado' })
   toggleActivo(
     @Param('id', ParseUUIDPipe) id: string,
@@ -178,7 +180,8 @@ export class PeriodoOtorgamientoController {
   @ApiResponse({ status: 404, description: 'Período no encontrado' })
   @ApiResponse({
     status: 409,
-    description: 'No se puede eliminar un período con solicitudes asociadas',
+    description:
+      'El período está activo o tiene solicitudes o sesiones asociadas',
   })
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.remove(id);

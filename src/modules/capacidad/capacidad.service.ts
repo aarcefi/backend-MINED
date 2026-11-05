@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateCapacidadDto, UpdateCapacidadDto } from './dto';
@@ -118,12 +119,19 @@ export class CapacidadCirculoService {
       }
     }
 
-    // Si se cambia capacidadTotal, recalcular sobrecapacidad
+    // Si se cambia capacidadTotal, recalcular sobrecapacidad y cupos libres
     const updateData: any = { ...data };
     if (data.capacidadTotal !== undefined) {
+      const ocupados = data.cuposOcupados ?? capacidad.cuposOcupados;
+      if (data.capacidadTotal < ocupados) {
+        throw new BadRequestException(
+          `La capacidad no puede ser menor que los ${ocupados} niño(s) ya matriculado(s)`,
+        );
+      }
       updateData.sobrecapacidad = this.calcularSobrecapacidad(
         data.capacidadTotal,
       );
+      updateData.cuposDisponibles ??= data.capacidadTotal - ocupados;
     }
 
     return this.prisma.capacidadCirculo.update({
@@ -166,6 +174,11 @@ export class CapacidadCirculoService {
     });
     if (!capacidad)
       throw new NotFoundException(`Capacidad con ID ${id} no encontrada`);
+    if (capacidad.cuposOcupados > 0) {
+      throw new ConflictException(
+        `No se puede eliminar: hay ${capacidad.cuposOcupados} niño(s) matriculado(s) en este año de vida`,
+      );
+    }
     return this.prisma.capacidadCirculo.delete({ where: { id } });
   }
 

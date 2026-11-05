@@ -133,6 +133,9 @@ describe('SolicitudService', () => {
 
   const mockValidacionService = {
     verificarCarnetIdentidad: jest.fn().mockResolvedValue(true),
+    obtenerNombre: jest
+      .fn()
+      .mockResolvedValue({ nombre: 'Juan', apellidos: 'Pérez' }),
   };
 
   const mockPriorityCalculator = {
@@ -243,9 +246,7 @@ describe('SolicitudService', () => {
 
       const result = await service.create(createDto, { id: 'user-id' });
       expect(result).toHaveProperty('id', 'solicitud-id');
-      expect(
-        mockValidacionService.verificarCarnetIdentidad,
-      ).not.toHaveBeenCalled();
+      expect(mockValidacionService.obtenerNombre).not.toHaveBeenCalled();
     });
 
     it('should create a new nino if not found and verify carnet', async () => {
@@ -262,10 +263,10 @@ describe('SolicitudService', () => {
       mockPrisma.solicitud.create.mockResolvedValueOnce(mockSolicitud);
 
       const result = await service.create(createDto, { id: 'user-id' });
-      expect(
-        mockValidacionService.verificarCarnetIdentidad,
-      ).toHaveBeenCalledWith('TM001');
-      expect(mockNinosService.create).toHaveBeenCalled();
+      expect(mockValidacionService.obtenerNombre).toHaveBeenCalledWith('TM001');
+      expect(mockNinosService.create).toHaveBeenCalledWith(
+        expect.objectContaining({ nombre: 'Juan', apellidos: 'Pérez' }),
+      );
       expect(result).toHaveProperty('id', 'solicitud-id');
     });
 
@@ -353,45 +354,38 @@ describe('SolicitudService', () => {
       expect(result[0]).toHaveProperty('id', 'solicitud-id');
     });
 
-    it('should apply municipio filter for solicitante', async () => {
-      mockPrisma.solicitud.findMany.mockResolvedValueOnce([mockSolicitud]);
-      await service.findAll(
-        { municipio: 'La Habana' },
-        { rol: RolUsuario.ADMINISTRADOR },
+    it('should apply municipio filter in both directions', async () => {
+      mockPrisma.solicitud.findMany.mockResolvedValueOnce([
+        { ...mockSolicitud, solicitante: { usuario: { municipio: 'Plaza' } } },
+        {
+          ...mockSolicitud,
+          solicitante: { usuario: { municipio: 'Plaza de la Revolución' } },
+        },
+        { ...mockSolicitud, solicitante: { usuario: { municipio: 'Cerro' } } },
+      ]);
+      const result = await service.findAll(
+        { municipio: 'Plaza de la Revolución' },
+        { rol: RolUsuario.COMISION_OTORGAMIENTO },
       );
-      expect(mockPrisma.solicitud.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            solicitante: {
-              usuario: {
-                municipio: { contains: 'La Habana', mode: 'insensitive' },
-              },
-            },
-          }),
-        }),
-      );
+      expect(result).toHaveLength(2);
     });
 
     it('should filter by director de circulo municipio', async () => {
-      mockPrisma.solicitud.findMany.mockResolvedValueOnce([mockSolicitud]);
-      await service.findAll(
+      mockPrisma.solicitud.findMany.mockResolvedValueOnce([
+        {
+          ...mockSolicitud,
+          solicitante: { usuario: { municipio: 'Centro Habana' } },
+        },
+        { ...mockSolicitud, solicitante: { usuario: { municipio: 'Cerro' } } },
+      ]);
+      const result = await service.findAll(
         {},
         {
           rol: RolUsuario.DIRECTOR_CIRCULO,
           perfil: { municipio: 'Centro Habana' },
         },
       );
-      expect(mockPrisma.solicitud.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            solicitante: {
-              usuario: {
-                municipio: { contains: 'Centro Habana', mode: 'insensitive' },
-              },
-            },
-          }),
-        }),
-      );
+      expect(result).toHaveLength(1);
     });
 
     it('should apply date filters', async () => {
@@ -522,19 +516,17 @@ describe('SolicitudService', () => {
     });
 
     it('should filter by municipio', async () => {
-      mockPrisma.solicitud.findMany.mockResolvedValueOnce([mockSolicitud]);
-      await service.findPendientesRevision('La Habana');
-      expect(mockPrisma.solicitud.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            solicitante: {
-              usuario: {
-                municipio: { contains: 'La Habana', mode: 'insensitive' },
-              },
-            },
-          }),
-        }),
+      mockPrisma.solicitud.findMany.mockResolvedValueOnce([
+        { ...mockSolicitud, solicitante: { usuario: { municipio: 'Plaza' } } },
+        {
+          ...mockSolicitud,
+          solicitante: { usuario: { municipio: 'Marianao' } },
+        },
+      ]);
+      const result = await service.findPendientesRevision(
+        'Plaza de la Revolución',
       );
+      expect(result).toHaveLength(1);
     });
   });
 

@@ -272,7 +272,15 @@ export class NinosService {
       include: {
         solicitante: {
           include: {
-            usuario: true,
+            usuario: {
+              omit: {
+                password: true,
+                refreshToken: true,
+                tokenExpiry: true,
+                resetPasswordCode: true,
+                resetPasswordExpiry: true,
+              },
+            },
           },
         },
         solicitud: true,

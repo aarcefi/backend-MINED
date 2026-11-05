@@ -8,6 +8,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -34,6 +35,20 @@ export class ValidacionIdentidadController {
   @ApiParam({ name: 'carnet', description: 'Carnet de identidad' })
   async getCiudadano(@Param('carnet') carnet: string) {
     return this.service.obtenerCiudadano(carnet);
+  }
+
+  @Get('ciudadano/:carnet/nombre')
+  @Roles(
+    RolUsuario.ADMINISTRADOR,
+    RolUsuario.FUNCIONARIO_MUNICIPAL,
+    RolUsuario.SOLICITANTE,
+  )
+  @ApiOperation({
+    summary: 'Nombre y apellidos de un carnet para la inscripción',
+  })
+  @ApiParam({ name: 'carnet', description: 'Carnet de identidad' })
+  async getNombre(@Param('carnet') carnet: string) {
+    return this.service.obtenerNombre(carnet);
   }
 
   @Post('cargar')

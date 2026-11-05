@@ -8,7 +8,7 @@ describe('CapacidadCirculoController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [CapacidadCirculoController],
-      providers: [CapacidadCirculoService],
+      providers: [{ provide: CapacidadCirculoService, useValue: {} }],
     }).compile();
 
     controller = module.get<CapacidadCirculoController>(

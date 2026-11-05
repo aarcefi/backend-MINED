@@ -282,12 +282,16 @@ export class MatriculaController {
   @ApiOperation({ summary: 'Cambiar estado de matrícula' })
   @ApiParam({ name: 'id', description: 'ID de la matrícula' })
   @ApiResponse({ status: 200, description: 'Estado actualizado' })
+  @ApiResponse({ status: 400, description: 'Cambio de estado no permitido' })
+  @ApiResponse({ status: 403, description: 'La matrícula es de otro círculo' })
   @ApiResponse({ status: 404, description: 'Matrícula no encontrada' })
+  @ApiResponse({ status: 409, description: 'No quedan plazas para reactivar' })
   cambiarEstado(
     @Param('id', ParseUUIDPipe) id: string,
     @Body('estado') estado: EstadoMatricula,
+    @GetUser() usuario: any,
   ) {
-    return this.matriculasService.update(id, { estado } as UpdateMatriculaDto);
+    return this.matriculasService.cambiarEstado(id, estado, usuario);
   }
 
   @Patch(':id/activar')

@@ -1,20 +1,28 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { PeriodoController } from './periodo.controller';
+import { PeriodoOtorgamientoController } from './periodo.controller';
 import { PeriodoService } from './periodo.service';
 
-describe('PeriodoController', () => {
-  let controller: PeriodoController;
+describe('PeriodoOtorgamientoController', () => {
+  let controller: PeriodoOtorgamientoController;
+  const service = { findAll: jest.fn() };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [PeriodoController],
-      providers: [PeriodoService],
+      controllers: [PeriodoOtorgamientoController],
+      providers: [{ provide: PeriodoService, useValue: service }],
     }).compile();
 
-    controller = module.get<PeriodoController>(PeriodoController);
+    controller = module.get(PeriodoOtorgamientoController);
   });
 
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
+  it.each([
+    ['true', true],
+    ['false', false],
+    [undefined, undefined],
+  ])('convierte el query activo=%s en %s', (texto, valor) => {
+    void controller.findAll(texto);
+    expect(service.findAll).toHaveBeenLastCalledWith(
+      expect.objectContaining({ activo: valor }),
+    );
   });
 });

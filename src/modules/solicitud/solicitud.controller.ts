@@ -147,13 +147,6 @@ export class SolicitudController {
       municipio = req.user.perfil.municipio;
     }
 
-    if (
-      req.user.rol === RolUsuario.FUNCIONARIO_MUNICIPAL ||
-      req.user.rol === RolUsuario.COMISION_OTORGAMIENTO
-    ) {
-      municipio = req.user.municipio;
-    }
-
     const estadoNormalizado =
       estado === 'APROBADA'
         ? EstadoSolicitud.APROBADA_DIRECCION

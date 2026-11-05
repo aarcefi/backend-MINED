@@ -34,6 +34,20 @@ export class ValidacionIdentidadService {
     return ciudadano;
   }
 
+  // Solo el nombre: el formulario de inscripción lo propone a partir del carnet
+  async obtenerNombre(carnetIdentidad: string) {
+    const ciudadano = await this.prisma.ciudadano.findUnique({
+      where: { carnetIdentidad },
+      select: { nombre: true, apellidos: true },
+    });
+    if (!ciudadano) {
+      throw new NotFoundException(
+        `El carnet ${carnetIdentidad} no está en el registro de identidad.`,
+      );
+    }
+    return ciudadano;
+  }
+
   async cargarCiudadanos(data: any[]) {
     for (const item of data) {
       await this.prisma.ciudadano.upsert({

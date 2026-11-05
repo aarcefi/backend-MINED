@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { hoy } from './fechas';
 
 @Injectable()
 export class PeriodoSchedulerService {
@@ -8,35 +9,39 @@ export class PeriodoSchedulerService {
 
   constructor(private prisma: PrismaService) {}
 
+  /**
+   * Solo actúa en los cambios de fecha: cierra los períodos vencidos y activa
+   * el que empieza hoy. Así no reactiva cada noche un período que el
+   * administrador desactivó a mano en mitad de su vigencia.
+   */
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
-  async actualizarPeriodosActivos() {
+  async actualizarPeriodosActivos(ahora = new Date()) {
     this.logger.log('Ejecutando actualización automática de períodos activos');
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
+    const dia = hoy(ahora);
 
-    // Buscar período que cubre la fecha actual
-    const periodoActivo = await this.prisma.periodoOtorgamiento.findFirst({
-      where: {
-        fechaInicio: { lte: hoy },
-        fechaCierre: { gte: hoy },
-      },
-    });
-
-    // Desactivar todos los períodos primero
-    await this.prisma.periodoOtorgamiento.updateMany({
-      where: { activo: true },
+    const vencidos = await this.prisma.periodoOtorgamiento.updateMany({
+      where: { activo: true, fechaCierre: { lt: dia } },
       data: { activo: false },
     });
-
-    // Activar el período correspondiente si existe
-    if (periodoActivo) {
-      await this.prisma.periodoOtorgamiento.update({
-        where: { id: periodoActivo.id },
-        data: { activo: true },
-      });
-      this.logger.log(`Período activado: ${periodoActivo.nombre}`);
-    } else {
-      this.logger.warn('No hay período activo para la fecha actual');
+    if (vencidos.count > 0) {
+      this.logger.log(`Períodos cerrados por fecha: ${vencidos.count}`);
     }
+
+    const queEmpieza = await this.prisma.periodoOtorgamiento.findFirst({
+      where: { fechaInicio: dia },
+    });
+    if (!queEmpieza) return;
+
+    await this.prisma.$transaction([
+      this.prisma.periodoOtorgamiento.updateMany({
+        where: { activo: true, id: { not: queEmpieza.id } },
+        data: { activo: false },
+      }),
+      this.prisma.periodoOtorgamiento.update({
+        where: { id: queEmpieza.id },
+        data: { activo: true },
+      }),
+    ]);
+    this.logger.log(`Período activado: ${queEmpieza.nombre}`);
   }
 }

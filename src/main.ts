@@ -27,11 +27,17 @@ async function bootstrap() {
 
   app.useGlobalPipes(new ValidationPipe());
 
+  // La sesión vive en cookies httpOnly del frontend: el navegador habla con Astro y
+  // Astro llama a esta API desde el servidor, sin CORS. Solo los orígenes listados
+  // en CORS_ORIGINS (separados por comas) pueden llamarla desde un navegador.
+  const origenes = (process.env.CORS_ORIGINS ?? 'http://localhost:4321')
+    .split(',')
+    .map((origen) => origen.trim())
+    .filter(Boolean);
   app.enableCors({
-    origin: '*',
+    origin: origenes,
     methods: 'GET,PUT,PATCH,POST,DELETE',
     allowedHeaders: 'Content-Type, Authorization',
-    credentials: true,
   });
 
   await app.listen(process.env.PORT ?? 3000);
