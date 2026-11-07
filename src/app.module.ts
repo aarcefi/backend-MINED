@@ -20,6 +20,7 @@ import { PerfilesModule } from './modules/index';
 import { NotificacionesModule } from './modules/index';
 import { EventsModule } from './common/events/events.module';
 import { UtilsModule } from './common/utils/utils.module';
+import { UbicacionModule } from './modules/ubicacion/ubicacion.module';
 import jwtConfig from './config/jwt.config';
 
 @Module({
@@ -47,6 +48,7 @@ import jwtConfig from './config/jwt.config';
     DecisionSolicitudModule,
     MatriculasModule,
     ControlTrimestralModule,
+    UbicacionModule,
     TrazabilidadModule,
   ],
   providers: [

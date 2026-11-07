@@ -8,6 +8,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { resolverUbicacion } from '../../common/utils/ubicacion.util';
 import {
   CapacidadAnioDto,
   CreateCirculoInfantilDto,
@@ -29,6 +30,24 @@ const NOMBRE_ANIO: Record<AnioVida, string> = {
   ANIO_6: '6to año de vida',
 };
 
+// El frontend trabaja con los nombres: se devuelven como texto, igual que antes
+// de pasar provincia y municipio a tablas propias
+const UBICACION = { municipioRel: true, provinciaRel: true } as const;
+
+function conUbicacion<
+  T extends {
+    municipioRel?: { nombre: string } | null;
+    provinciaRel?: { nombre: string } | null;
+  },
+>(circulo: T) {
+  const { municipioRel, provinciaRel, ...resto } = circulo;
+  return {
+    ...resto,
+    municipio: municipioRel?.nombre ?? null,
+    provincia: provinciaRel?.nombre ?? null,
+  };
+}
+
 /** Igual que en CapacidadCirculoService: 120 % de la capacidad nominal. */
 const sobrecapacidad = (capacidadTotal: number) =>
   Math.ceil(capacidadTotal * 1.2);
@@ -42,8 +61,6 @@ export class CirculoInfantilService {
     const campos = {
       nombre: data.nombre?.trim(),
       direccion: data.direccion?.trim(),
-      municipio: data.municipio?.trim(),
-      provincia: data.provincia?.trim(),
       capacidadTotal: data.capacidadTotal,
       tipo: data.tipo,
       activo: data.activo,
@@ -53,21 +70,38 @@ export class CirculoInfantilService {
     };
     return Object.fromEntries(
       Object.entries(campos).filter(([, v]) => v !== undefined),
-    ) as Prisma.CirculoInfantilUpdateInput;
+    ) as Prisma.CirculoInfantilUncheckedUpdateInput;
+  }
+
+  /** Convierte los nombres de municipio y provincia en sus ids. */
+  private async idsUbicacion(data: UpdateCirculoInfantilDto) {
+    if (!data.municipio) return {};
+    return resolverUbicacion(
+      this.prisma,
+      data.municipio.trim(),
+      data.provincia?.trim(),
+    );
   }
 
   async create(data: CreateCirculoInfantilDto) {
     const circulo = {
-      ...(this.camposCirculo(data) as Prisma.CirculoInfantilCreateInput),
+      ...(this.camposCirculo(
+        data,
+      ) as Prisma.CirculoInfantilUncheckedCreateInput),
+      ...(await this.idsUbicacion(data)),
       tieneSextoAnio: data.tieneSextoAnio ?? false,
     };
-    return this.prisma.$transaction(async (tx) => {
-      const creado = await tx.circuloInfantil.create({ data: circulo });
+    const creado = await this.prisma.$transaction(async (tx) => {
+      const nuevo = await tx.circuloInfantil.create({
+        data: circulo,
+        include: UBICACION,
+      });
       if (data.capacidades) {
-        await this.sincronizarCapacidades(tx, creado, [], data.capacidades);
+        await this.sincronizarCapacidades(tx, nuevo, [], data.capacidades);
       }
-      return creado;
+      return nuevo;
     });
+    return conUbicacion(creado);
   }
 
   /**
@@ -177,34 +211,34 @@ export class CirculoInfantilService {
     if (filtros?.tipo) where.tipo = filtros.tipo;
     if (filtros?.activo !== undefined) where.activo = filtros.activo;
 
-    return this.prisma.circuloInfantil.findMany({
+    const circulos = await this.prisma.circuloInfantil.findMany({
       where,
       include: {
         capacidades: true,
         matriculas: { where: { estado: 'ACTIVA' } },
-        municipioRel: true,
-        provinciaRel: true,
+        ...UBICACION,
       },
       orderBy: { nombre: 'asc' },
     });
+    return circulos.map(conUbicacion);
   }
 
   async findActivos() {
-    return this.prisma.circuloInfantil.findMany({
+    const circulos = await this.prisma.circuloInfantil.findMany({
       where: { activo: true },
       include: {
         capacidades: {
           where: { cuposDisponibles: { gt: 0 } },
         },
-        municipioRel: true,
-        provinciaRel: true,
+        ...UBICACION,
       },
       orderBy: { nombre: 'asc' },
     });
+    return circulos.map(conUbicacion);
   }
 
-  findOne(id: string) {
-    return this.prisma.circuloInfantil.findUnique({
+  async findOne(id: string) {
+    const circulo = await this.prisma.circuloInfantil.findUnique({
       where: { id },
       include: {
         capacidades: {
@@ -214,12 +248,14 @@ export class CirculoInfantilService {
           include: { solicitud: { include: { nino: true } } },
           orderBy: { fechaOtorgamiento: 'desc' },
         },
+        ...UBICACION,
       },
     });
+    return circulo ? conUbicacion(circulo) : null;
   }
 
   async findByMunicipio(municipio: string) {
-    return this.prisma.circuloInfantil.findMany({
+    const circulos = await this.prisma.circuloInfantil.findMany({
       where: {
         municipioRel: {
           nombre: { contains: municipio, mode: 'insensitive' },
@@ -228,10 +264,10 @@ export class CirculoInfantilService {
       },
       include: {
         capacidades: { where: { cuposDisponibles: { gt: 0 } } },
-        municipioRel: true,
-        provinciaRel: true,
+        ...UBICACION,
       },
     });
+    return circulos.map(conUbicacion);
   }
 
   async findCapacidades(id: string) {
@@ -399,7 +435,10 @@ export class CirculoInfantilService {
     if (!circulo)
       throw new NotFoundException(`Círculo con ID ${id} no encontrado`);
 
-    const campos = this.camposCirculo(data);
+    const campos = {
+      ...this.camposCirculo(data),
+      ...(await this.idsUbicacion(data)),
+    };
     const final = {
       id,
       capacidadTotal: data.capacidadTotal ?? circulo.capacidadTotal,
@@ -407,7 +446,7 @@ export class CirculoInfantilService {
     };
 
     // Círculo y capacidades se guardan juntos o no se guarda nada
-    return this.prisma.$transaction(async (tx) => {
+    const actualizado = await this.prisma.$transaction(async (tx) => {
       const actuales = await tx.capacidadCirculo.findMany({
         where: { circuloId: id },
       });
@@ -422,9 +461,13 @@ export class CirculoInfantilService {
       return tx.circuloInfantil.update({
         where: { id },
         data: campos,
-        include: { capacidades: { orderBy: { anioVida: 'asc' } } },
+        include: {
+          capacidades: { orderBy: { anioVida: 'asc' } },
+          ...UBICACION,
+        },
       });
     });
+    return conUbicacion(actualizado);
   }
 
   async toggleActivo(id: string, activo: boolean) {
@@ -436,10 +479,12 @@ export class CirculoInfantilService {
     });
     if (!circulo)
       throw new NotFoundException(`Círculo con ID ${id} no encontrado`);
-    return this.prisma.circuloInfantil.update({
+    const actualizado = await this.prisma.circuloInfantil.update({
       where: { id },
       data: { activo },
+      include: UBICACION,
     });
+    return conUbicacion(actualizado);
   }
 
   /**

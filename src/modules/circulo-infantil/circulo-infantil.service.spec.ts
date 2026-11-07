@@ -47,6 +47,9 @@ describe('CirculoInfantilService', () => {
       delete: jest.fn(),
       deleteMany: jest.fn(),
     },
+    municipio: {
+      findFirst: jest.fn().mockResolvedValue({ id: 'm1', provinciaId: 'p1' }),
+    },
     $transaction: jest.fn((arg: unknown) =>
       typeof arg === 'function'
         ? (arg as (tx: unknown) => unknown)(mockPrisma)
@@ -255,6 +258,27 @@ describe('CirculoInfantilService', () => {
     });
   });
 
+  describe('findActivos', () => {
+    it('devuelve provincia y municipio como texto', async () => {
+      Object.assign(mockPrisma.circuloInfantil, {
+        findMany: jest.fn().mockResolvedValueOnce([
+          {
+            id: 'c1',
+            nombre: 'Círculo',
+            municipioRel: { nombre: 'Plaza de la Revolución' },
+            provinciaRel: { nombre: 'La Habana' },
+          },
+        ]),
+      });
+      const [circulo] = await service.findActivos();
+      expect(circulo).toMatchObject({
+        municipio: 'Plaza de la Revolución',
+        provincia: 'La Habana',
+      });
+      expect(circulo).not.toHaveProperty('municipioRel');
+    });
+  });
+
   describe('create', () => {
     it('crea el círculo y sus capacidades en una transacción', async () => {
       await service.create({
@@ -269,6 +293,18 @@ describe('CirculoInfantilService', () => {
         capacidades: [{ anioVida: AnioVida.ANIO_2, capacidadTotal: 20 }],
       });
       expect(mockPrisma.$transaction).toHaveBeenCalled();
+      // La ubicación se guarda con los ids de las tablas, no como texto
+      expect(mockPrisma.circuloInfantil.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            municipioId: 'm1',
+            provinciaId: 'p1',
+          }),
+        }),
+      );
+      expect(
+        mockPrisma.circuloInfantil.create.mock.calls[0][0].data,
+      ).not.toHaveProperty('municipio');
       expect(cap.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           circuloId: 'c1',
