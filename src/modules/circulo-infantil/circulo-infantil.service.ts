@@ -165,10 +165,14 @@ export class CirculoInfantilService {
   }) {
     const where: any = {};
     if (filtros?.municipio) {
-      where.municipio = { contains: filtros.municipio, mode: 'insensitive' };
+      where.municipioRel = {
+        nombre: { contains: filtros.municipio, mode: 'insensitive' },
+      };
     }
     if (filtros?.provincia) {
-      where.provincia = { contains: filtros.provincia, mode: 'insensitive' };
+      where.provinciaRel = {
+        nombre: { contains: filtros.provincia, mode: 'insensitive' },
+      };
     }
     if (filtros?.tipo) where.tipo = filtros.tipo;
     if (filtros?.activo !== undefined) where.activo = filtros.activo;
@@ -176,8 +180,10 @@ export class CirculoInfantilService {
     return this.prisma.circuloInfantil.findMany({
       where,
       include: {
-        capacidades: true, // ya no incluye periodo
+        capacidades: true,
         matriculas: { where: { estado: 'ACTIVA' } },
+        municipioRel: true,
+        provinciaRel: true,
       },
       orderBy: { nombre: 'asc' },
     });
@@ -190,6 +196,8 @@ export class CirculoInfantilService {
         capacidades: {
           where: { cuposDisponibles: { gt: 0 } },
         },
+        municipioRel: true,
+        provinciaRel: true,
       },
       orderBy: { nombre: 'asc' },
     });
@@ -213,13 +221,15 @@ export class CirculoInfantilService {
   async findByMunicipio(municipio: string) {
     return this.prisma.circuloInfantil.findMany({
       where: {
-        municipio: { contains: municipio, mode: 'insensitive' },
+        municipioRel: {
+          nombre: { contains: municipio, mode: 'insensitive' },
+        },
         activo: true,
       },
       include: {
-        capacidades: {
-          where: { cuposDisponibles: { gt: 0 } },
-        },
+        capacidades: { where: { cuposDisponibles: { gt: 0 } } },
+        municipioRel: true,
+        provinciaRel: true,
       },
     });
   }

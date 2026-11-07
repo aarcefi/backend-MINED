@@ -25,6 +25,10 @@ import { randomInt } from 'crypto';
 import { PerfilesService } from 'src/modules/perfiles/perfiles.service';
 import { UsuariosService } from 'src/modules/usuario/usuarios.service';
 import { ValidacionIdentidadService } from 'src/modules/validacion-ficha-unica/validacion-ficha-unica.service';
+<<<<<<< HEAD
+=======
+import { resolverUbicacion } from 'src/common/utils/ubicacion.util';
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
 
 function parseExpiresIn(expiresIn: string): number {
   if (!isNaN(Number(expiresIn))) {
@@ -77,6 +81,11 @@ export class AuthService {
         perfilDirector: {
           include: { circulo: true },
         },
+<<<<<<< HEAD
+=======
+        municipioRel: true,
+        provinciaRel: true,
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
       },
     });
 
@@ -135,6 +144,15 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(registerDto.password, 10);
 
+<<<<<<< HEAD
+=======
+    const { municipioId, provinciaId } = await resolverUbicacion(
+      this.prisma,
+      registerDto.datosSolicitante.municipio,
+      registerDto.datosSolicitante.provincia,
+    );
+
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
     const usuario = await this.prisma.$transaction(async (prisma) => {
       const newUser = await prisma.usuario.create({
         data: {
@@ -146,8 +164,13 @@ export class AuthService {
           apellidos: registerDto.datosSolicitante.apellidos,
           carnetIdentidad: registerDto.datosSolicitante.carnetIdentidad,
           telefono: registerDto.datosSolicitante.telefono,
+<<<<<<< HEAD
           municipio: registerDto.datosSolicitante.municipio,
           provincia: registerDto.datosSolicitante.provincia,
+=======
+          municipioId,
+          provinciaId,
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
         },
       });
 
@@ -184,6 +207,17 @@ export class AuthService {
   ): Promise<TokensDto> {
     const usuario = await this.prisma.usuario.findUnique({
       where: { id: userId },
+<<<<<<< HEAD
+=======
+      include: {
+        perfilSolicitante: true,
+        perfilFuncionario: true,
+        perfilComision: true,
+        perfilDirector: true,
+        municipioRel: true,
+        provinciaRel: true,
+      },
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
     });
 
     if (!usuario || !usuario.refreshToken) {
@@ -338,6 +372,7 @@ export class AuthService {
     };
   }
 
+<<<<<<< HEAD
   private async updateRefreshToken(
     userId: string,
     refreshToken: string,
@@ -355,6 +390,8 @@ export class AuthService {
     });
   }
 
+=======
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
   private createUsuarioResponse(usuario: any): ProfileResponseDto {
     const {
       password,
@@ -372,8 +409,13 @@ export class AuthService {
       apellidos: userData.apellidos,
       carnetIdentidad: userData.carnetIdentidad,
       telefono: userData.telefono,
+<<<<<<< HEAD
       municipio: userData.municipio,
       provincia: userData.provincia,
+=======
+      municipio: userData.municipioRel?.nombre ?? null,
+      provincia: userData.provinciaRel?.nombre ?? null,
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
     };
 
     const response: ProfileResponseDto = {

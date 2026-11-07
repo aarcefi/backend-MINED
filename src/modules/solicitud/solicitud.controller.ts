@@ -259,8 +259,14 @@ export class SolicitudController {
     @Query('periodoId') periodoId?: string,
     @Query('municipio') municipio?: string,
   ) {
-    if (req.user.rol === RolUsuario.DIRECTOR_CIRCULO && req.user.perfil) {
-      municipio = req.user.perfil.municipio;
+    switch (req.user.rol) {
+      case RolUsuario.DIRECTOR_CIRCULO:
+        municipio = req.user.perfil?.municipio;
+        break;
+      case RolUsuario.FUNCIONARIO_MUNICIPAL:
+      case RolUsuario.COMISION_OTORGAMIENTO:
+        municipio = req.user.municipio;
+        break;
     }
     return this.solicitudService.getEstadisticas({ periodoId, municipio });
   }
@@ -352,7 +358,8 @@ export class SolicitudController {
         },
         circuloId: {
           type: 'string',
-          description: 'Círculo donde se otorga la plaza al aprobar por comisión',
+          description:
+            'Círculo donde se otorga la plaza al aprobar por comisión',
           nullable: true,
         },
       },

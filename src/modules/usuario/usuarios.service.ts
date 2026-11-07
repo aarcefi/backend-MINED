@@ -20,6 +20,7 @@ import { CreatePerfilFuncionarioDto } from '../perfiles/perfil-funcionario/dto/c
 import { CreatePerfilComisionDto } from '../perfiles/perfil-comision/dto/create-perfil-comision.dto';
 import { CreatePerfilDirectorDto } from '../perfiles/perfil-director/create-perfil-director.dto';
 import { PerfilesService } from '../perfiles/perfiles.service';
+import { resolverUbicacion } from 'src/common/utils/ubicacion.util';
 
 @Injectable()
 export class UsuariosService {
@@ -35,7 +36,12 @@ export class UsuariosService {
     const hashedPassword = await bcrypt.hash(createUsuarioDto.password, 10);
 
     const usuario = await this.prisma.$transaction(async (prisma) => {
-      // Crear usuario
+      const { municipioId, provinciaId } = await resolverUbicacion(
+        this.prisma,
+        createUsuarioDto.municipio,
+        createUsuarioDto.provincia,
+      );
+
       const newUser = await prisma.usuario.create({
         data: {
           email: createUsuarioDto.email,
@@ -46,8 +52,8 @@ export class UsuariosService {
           apellidos: createUsuarioDto.apellidos,
           carnetIdentidad: createUsuarioDto.carnetIdentidad,
           telefono: createUsuarioDto.telefono,
-          municipio: createUsuarioDto.municipio,
-          provincia: createUsuarioDto.provincia,
+          municipioId,
+          provinciaId,
         },
       });
 
@@ -88,6 +94,8 @@ export class UsuariosService {
           perfilFuncionario: true,
           perfilComision: true,
           perfilDirector: { include: { circulo: true } },
+          municipioRel: true,
+          provinciaRel: true,
         },
       });
     });
@@ -104,6 +112,8 @@ export class UsuariosService {
         perfilComision: true,
         perfilDirector: true,
         notificaciones: true,
+        municipioRel: true,
+        provinciaRel: true,
       },
     });
 
@@ -122,6 +132,9 @@ export class UsuariosService {
         perfilFuncionario: true,
         perfilComision: true,
         perfilDirector: true,
+        notificaciones: true,
+        municipioRel: true,
+        provinciaRel: true,
       },
     });
 
@@ -142,6 +155,9 @@ export class UsuariosService {
         perfilFuncionario: true,
         perfilComision: true,
         perfilDirector: true,
+        notificaciones: true,
+        municipioRel: true,
+        provinciaRel: true,
       },
     });
     if (!usuario) return null;
@@ -162,6 +178,8 @@ export class UsuariosService {
           orderBy: { fecha: 'desc' },
           take: 10,
         },
+        municipioRel: true,
+        provinciaRel: true,
       },
     });
 
@@ -180,6 +198,9 @@ export class UsuariosService {
         perfilFuncionario: true,
         perfilComision: true,
         perfilDirector: true,
+        notificaciones: true,
+        municipioRel: true,
+        provinciaRel: true,
       },
     });
 
@@ -199,6 +220,9 @@ export class UsuariosService {
           perfilFuncionario: true,
           perfilComision: true,
           perfilDirector: true,
+          notificaciones: true,
+          municipioRel: true,
+          provinciaRel: true,
         },
       });
 
@@ -338,7 +362,9 @@ export class UsuariosService {
     }
 
     if (filtros?.municipio) {
-      where.municipio = { contains: filtros.municipio, mode: 'insensitive' };
+      where.municipioRel = {
+        nombre: { contains: filtros.municipio, mode: 'insensitive' },
+      };
     }
 
     const usuarios = await this.prisma.usuario.findMany({
@@ -360,6 +386,8 @@ export class UsuariosService {
       email: usuario.email,
       rol: usuario.rol,
       activo: usuario.activo,
+      municipio: usuario.municipioRel?.nombre ?? null,
+      provincia: usuario.provinciaRel?.nombre ?? null,
       perfilSolicitante: usuario.perfilSolicitante,
       perfilFuncionario: usuario.perfilFuncionario,
       perfilComision: usuario.perfilComision,

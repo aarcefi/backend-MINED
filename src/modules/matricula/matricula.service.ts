@@ -1,4 +1,9 @@
+<<<<<<< HEAD
 /* eslint-disable prettier/prettier */
+=======
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import {
@@ -452,6 +457,10 @@ export class MatriculasService {
   async getEstadisticasCirculo(circuloId: string) {
     const circulo = await this.prisma.circuloInfantil.findUnique({
       where: { id: circuloId },
+<<<<<<< HEAD
+=======
+      include: { municipioRel: true },
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
     });
     if (!circulo)
       throw new NotFoundException(`Círculo con ID ${circuloId} no encontrado`);
@@ -508,7 +517,11 @@ export class MatriculasService {
         id: circulo.id,
         nombre: circulo.nombre,
         direccion: circulo.direccion,
+<<<<<<< HEAD
         municipio: circulo.municipio,
+=======
+        municipio: circulo.municipioRel?.nombre ?? null,
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
         capacidadTotal: circulo.capacidadTotal,
       },
       estadisticas: {
@@ -692,7 +705,13 @@ export class MatriculasService {
     const matricula = await this.prisma.matricula.findUnique({
       where: { id },
       include: {
+<<<<<<< HEAD
         circulo: true,
+=======
+        circulo: {
+          include: { municipioRel: true }, // <-- añadir
+        },
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
         solicitud: {
           include: {
             nino: true,
@@ -787,7 +806,14 @@ export class MatriculasService {
   }
 
   private async verificarAccesoCirculo(
+<<<<<<< HEAD
     matricula: { circuloId: string; circulo: { municipio: string } },
+=======
+    matricula: {
+      circuloId: string;
+      circulo: { municipioRel: { nombre: string } | null }; // <-- antes: { municipio: string }
+    },
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
     usuario: any,
   ) {
     if (usuario?.rol === RolUsuario.DIRECTOR_CIRCULO) {
@@ -802,7 +828,14 @@ export class MatriculasService {
     }
     if (
       usuario?.rol === RolUsuario.FUNCIONARIO_MUNICIPAL &&
+<<<<<<< HEAD
       !mismoMunicipio(matricula.circulo.municipio, usuario.municipio)
+=======
+      !mismoMunicipio(
+        matricula.circulo.municipioRel?.nombre ?? null, // <-- antes: .municipio
+        usuario.municipio,
+      )
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
     ) {
       throw new ForbiddenException(
         'Solo puede gestionar matrículas de su municipio',

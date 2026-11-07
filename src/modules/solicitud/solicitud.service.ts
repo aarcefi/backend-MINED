@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
@@ -45,14 +46,18 @@ import { mismoMunicipio } from '../../common/utils/municipio';
 
 const PREFIJO_COMENTARIO_AUTOMATICO = 'Cambio de estado:';
 
-// Se filtra después de la consulta porque la coincidencia va en los dos sentidos
-const delMunicipio = <T extends { solicitante?: any }>(
+const municipioDeSolicitud = (solicitud: any): string | null =>
+  solicitud?.circulo?.municipioRel?.nombre ??
+  solicitud?.solicitante?.usuario?.municipioRel?.nombre ??
+  null;
+
+const delMunicipio = <T extends { circulo?: any; solicitante?: any }>(
   solicitudes: T[],
-  municipio?: string,
+  municipio?: string | null,
 ) =>
   municipio
     ? solicitudes.filter((s) =>
-        mismoMunicipio(s.solicitante?.usuario?.municipio, municipio),
+        mismoMunicipio(municipioDeSolicitud(s), municipio),
       )
     : solicitudes;
 
@@ -78,7 +83,9 @@ export class SolicitudService {
   ): Promise<SolicitudResponseDto> {
     const solicitante = await this.prisma.perfilSolicitante.findUnique({
       where: { id: data.solicitanteId },
-      include: { usuario: true },
+      include: {
+        usuario: { include: { municipioRel: true } },
+      },
     });
     if (!solicitante) {
       throw new NotFoundException(
@@ -90,12 +97,13 @@ export class SolicitudService {
     const periodoActivo =
       await this.periodoService.obtenerPeriodoActivo(fechaActual);
 
-    // 🔥 Validar círculo si viene en el DTO
+    let circuloSolicitado: any = null;
     if (data.circuloId) {
-      const circulo = await this.prisma.circuloInfantil.findUnique({
+      circuloSolicitado = await this.prisma.circuloInfantil.findUnique({
         where: { id: data.circuloId },
+        include: { municipioRel: true }, // <-- añadir
       });
-      if (!circulo) {
+      if (!circuloSolicitado) {
         throw new NotFoundException(
           `Círculo infantil con ID ${data.circuloId} no encontrado`,
         );
@@ -193,8 +201,12 @@ export class SolicitudService {
       include: {
         nino: true,
         periodo: true,
-        solicitante: { include: { usuario: true } },
-        circulo: true, // 🔥 NUEVO
+        solicitante: {
+          include: {
+            usuario: { include: { municipioRel: true, provinciaRel: true } },
+          },
+        },
+        circulo: { include: { municipioRel: true, provinciaRel: true } },
         documentos: true,
       },
     });
@@ -210,7 +222,7 @@ export class SolicitudService {
 
     await this.notificarPersonal(
       RolUsuario.FUNCIONARIO_MUNICIPAL,
-      solicitante.usuario.municipio,
+      municipioDeSolicitud(solicitud),
       'Nueva solicitud para revisar',
       `Se recibió la solicitud de ${nino.nombre} ${nino.apellidos}.`,
     );
@@ -241,10 +253,18 @@ export class SolicitudService {
     if (filtros?.solicitanteId) where.solicitanteId = filtros.solicitanteId;
     if (filtros?.ninoId) where.ninoId = filtros.ninoId;
 
-    const municipio =
-      usuario?.rol === RolUsuario.DIRECTOR_CIRCULO && usuario.perfil
-        ? usuario.perfil.municipio
-        : filtros?.municipio;
+    let municipio: string | null | undefined;
+    switch (usuario?.rol) {
+      case RolUsuario.DIRECTOR_CIRCULO:
+        municipio = usuario.perfil?.municipio;
+        break;
+      case RolUsuario.FUNCIONARIO_MUNICIPAL:
+      case RolUsuario.COMISION_OTORGAMIENTO:
+        municipio = usuario.municipio;
+        break;
+      default:
+        municipio = filtros?.municipio;
+    }
 
     if (filtros?.fechaDesde || filtros?.fechaHasta) {
       where.fechaSolicitud = {};
@@ -257,8 +277,12 @@ export class SolicitudService {
       include: {
         nino: { include: { solicitante: { include: { usuario: true } } } },
         periodo: true,
-        solicitante: { include: { usuario: true } },
-        circulo: true,
+        solicitante: {
+          include: {
+            usuario: { include: { municipioRel: true, provinciaRel: true } },
+          },
+        },
+        circulo: { include: { municipioRel: true, provinciaRel: true } },
         documentos: { where: { validado: true } },
         matricula: { include: { circulo: true } },
       },
@@ -276,8 +300,12 @@ export class SolicitudService {
       include: {
         nino: { include: { solicitante: { include: { usuario: true } } } },
         periodo: true,
-        solicitante: { include: { usuario: true } },
-        circulo: true, // 🔥 NUEVO
+        solicitante: {
+          include: {
+            usuario: { include: { municipioRel: true, provinciaRel: true } },
+          },
+        },
+        circulo: { include: { municipioRel: true, provinciaRel: true } },
         documentos: { include: { validador: true } },
         matricula: { include: { circulo: true, controles: true } },
         trazas: {
@@ -311,8 +339,12 @@ export class SolicitudService {
       include: {
         nino: { include: { solicitante: { include: { usuario: true } } } },
         periodo: true,
-        solicitante: { include: { usuario: true } },
-        circulo: true, // 🔥 NUEVO
+        solicitante: {
+          include: {
+            usuario: { include: { municipioRel: true, provinciaRel: true } },
+          },
+        },
+        circulo: { include: { municipioRel: true, provinciaRel: true } },
         documentos: true,
         matricula: { include: { circulo: true } },
       },
@@ -339,8 +371,12 @@ export class SolicitudService {
       include: {
         nino: { include: { solicitante: { include: { usuario: true } } } },
         periodo: true,
-        solicitante: { include: { usuario: true } },
-        circulo: true, // 🔥 NUEVO
+        solicitante: {
+          include: {
+            usuario: { include: { municipioRel: true, provinciaRel: true } },
+          },
+        },
+        circulo: { include: { municipioRel: true, provinciaRel: true } },
         documentos: true,
         matricula: { include: { circulo: true } },
       },
@@ -363,8 +399,12 @@ export class SolicitudService {
       include: {
         nino: { include: { solicitante: { include: { usuario: true } } } },
         periodo: true,
-        solicitante: { include: { usuario: true } },
-        circulo: true, // 🔥 NUEVO
+        solicitante: {
+          include: {
+            usuario: { include: { municipioRel: true, provinciaRel: true } },
+          },
+        },
+        circulo: { include: { municipioRel: true, provinciaRel: true } },
         documentos: true,
         matricula: { include: { circulo: true } },
       },
@@ -384,9 +424,13 @@ export class SolicitudService {
       where: { id },
       include: {
         nino: true,
-        solicitante: { include: { usuario: true } },
+        solicitante: {
+          include: {
+            usuario: { include: { municipioRel: true, provinciaRel: true } },
+          },
+        },
         periodo: true,
-        circulo: true, // 🔥 NUEVO
+        circulo: { include: { municipioRel: true, provinciaRel: true } },
       },
     });
     if (!solicitud) {
@@ -468,8 +512,12 @@ export class SolicitudService {
       include: {
         nino: true,
         periodo: true,
-        solicitante: { include: { usuario: true } },
-        circulo: true, // 🔥 NUEVO
+        solicitante: {
+          include: {
+            usuario: { include: { municipioRel: true, provinciaRel: true } },
+          },
+        },
+        circulo: { include: { municipioRel: true, provinciaRel: true } },
         documentos: true,
         matricula: true,
       },
@@ -519,9 +567,13 @@ export class SolicitudService {
       where: { id },
       include: {
         nino: true,
-        solicitante: { include: { usuario: true } },
+        solicitante: {
+          include: {
+            usuario: { include: { municipioRel: true, provinciaRel: true } },
+          },
+        },
         periodo: true,
-        circulo: true, // 🔥 NUEVO
+        circulo: { include: { municipioRel: true, provinciaRel: true } },
       },
     });
     if (!solicitud)
@@ -564,8 +616,12 @@ export class SolicitudService {
       include: {
         nino: true,
         periodo: true,
-        solicitante: { include: { usuario: true } },
-        circulo: true, // 🔥 NUEVO
+        solicitante: {
+          include: {
+            usuario: { include: { municipioRel: true, provinciaRel: true } },
+          },
+        },
+        circulo: { include: { municipioRel: true, provinciaRel: true } },
         documentos: true,
         matricula: true,
       },
@@ -585,8 +641,12 @@ export class SolicitudService {
       include: {
         nino: true,
         periodo: true,
-        solicitante: { include: { usuario: true } },
-        circulo: true,
+        solicitante: {
+          include: {
+            usuario: { include: { municipioRel: true, provinciaRel: true } },
+          },
+        },
+        circulo: { include: { municipioRel: true, provinciaRel: true } },
       },
     });
     if (!solicitud) {
@@ -603,14 +663,13 @@ export class SolicitudService {
 
     const estadoAnterior = solicitud.estado;
 
-    // 🔥 Crear matrícula si se aprueba por comisión: usa el círculo elegido por
-    // la comisión o, si no eligió ninguno, el preferido en la solicitud
     if (nuevoEstado === EstadoSolicitud.APROBADA_COMISION) {
       let circuloAsignado = solicitud.circulo;
 
       if (circuloId && circuloId !== solicitud.circuloId) {
         circuloAsignado = await this.prisma.circuloInfantil.findUnique({
           where: { id: circuloId },
+          include: { municipioRel: true, provinciaRel: true },
         });
         if (!circuloAsignado?.activo) {
           throw new NotFoundException(
@@ -694,8 +753,12 @@ export class SolicitudService {
       include: {
         nino: true,
         periodo: true,
-        solicitante: { include: { usuario: true } },
-        circulo: true, // 🔥 NUEVO
+        solicitante: {
+          include: {
+            usuario: { include: { municipioRel: true, provinciaRel: true } },
+          },
+        },
+        circulo: { include: { municipioRel: true, provinciaRel: true } },
         documentos: true,
         matricula: true,
       },
@@ -722,7 +785,7 @@ export class SolicitudService {
     if (nuevoEstado === EstadoSolicitud.APROBADA_DIRECCION) {
       await this.notificarPersonal(
         RolUsuario.COMISION_OTORGAMIENTO,
-        solicitanteUsuario.municipio,
+        municipioDeSolicitud(solicitudActualizada),
         'Solicitud lista para evaluar',
         `La Dirección Municipal aprobó la solicitud de ${nino.nombre} ${nino.apellidos}.`,
       );
@@ -736,18 +799,21 @@ export class SolicitudService {
   // Aviso interno: si falla, la operación principal ya está hecha y no se revierte
   private async notificarPersonal(
     rol: RolUsuario,
-    municipio: string,
+    municipio: string | null | undefined,
     titulo: string,
     mensaje: string,
   ) {
     try {
       const usuarios = await this.prisma.usuario.findMany({
         where: { rol, activo: true },
-        select: { id: true, municipio: true },
+        select: {
+          id: true,
+          municipioRel: { select: { nombre: true } },
+        },
       });
       await this.prisma.notificacion.createMany({
         data: usuarios
-          .filter((u) => mismoMunicipio(u.municipio, municipio))
+          .filter((u) => mismoMunicipio(u.municipioRel?.nombre, municipio))
           .map((u) => ({ usuarioId: u.id, titulo, mensaje, tipo: 'SISTEMA' })),
       });
     } catch (error) {
@@ -791,8 +857,13 @@ export class SolicitudService {
     const solicitud = await this.prisma.solicitud.findUnique({
       where: { id },
       include: {
-        solicitante: { include: { usuario: true } },
+        solicitante: {
+          include: {
+            usuario: { include: { municipioRel: true } },
+          },
+        },
         documentos: { select: { archivoUrl: true } },
+        circulo: { include: { municipioRel: true, provinciaRel: true } },
       },
     });
     if (!solicitud) {
@@ -831,26 +902,27 @@ export class SolicitudService {
   }
 
   async getEstadisticas(filtros?: { periodoId?: string; municipio?: string }) {
-    const where: any = {};
-    if (filtros?.periodoId) where.periodoId = filtros.periodoId;
-    if (filtros?.municipio) {
-      where.solicitante = {
-        usuario: {
-          municipio: { contains: filtros.municipio, mode: 'insensitive' },
-        },
-      };
-    }
-
     const solicitudes = await this.prisma.solicitud.findMany({
-      where,
+      where: filtros?.periodoId ? { periodoId: filtros.periodoId } : {},
       include: {
         nino: true,
-        solicitante: { include: { usuario: true } },
+        solicitante: {
+          include: {
+            usuario: { include: { municipioRel: true } },
+          },
+        },
+        circulo: { include: { municipioRel: true } },
         decisiones: true,
       },
     });
 
-    const total = solicitudes.length;
+    const filtradas = filtros?.municipio
+      ? solicitudes.filter((s) =>
+          mismoMunicipio(municipioDeSolicitud(s), filtros.municipio),
+        )
+      : solicitudes;
+
+    const total = filtradas.length;
     const porEstado = {
       EN_REVISION: 0,
       REVISADA: 0,
@@ -863,15 +935,13 @@ export class SolicitudService {
     const porSector: Record<string, number> = {};
     const porTipo = { TRABAJADOR: 0, ESTUDIANTE: 0, CASO_SOCIAL: 0 };
 
-    solicitudes.forEach((s) => {
+    filtradas.forEach((s) => {
       porEstado[s.estado]++;
       porSector[s.sector] = (porSector[s.sector] ?? 0) + 1;
       porTipo[s.tipoSolicitud]++;
     });
 
-    const conDecision = solicitudes.filter(
-      (s) => s.decisiones.length > 0,
-    ).length;
+    const conDecision = filtradas.filter((s) => s.decisiones.length > 0).length;
     const sinDecision = total - conDecision;
 
     return {
@@ -901,43 +971,46 @@ export class SolicitudService {
   // ========== Métodos privados ==========
 
   private verificarPermisosSolicitud(solicitud: any, usuario: any): void {
-    if (
-      usuario?.rol === RolUsuario.ADMINISTRADOR ||
-      usuario?.rol === RolUsuario.COMISION_OTORGAMIENTO
-    ) {
+    // 1. Admin
+    if (usuario?.rol === RolUsuario.ADMINISTRADOR) {
       return;
     }
-    if ([RolUsuario.FUNCIONARIO_MUNICIPAL].includes(usuario?.rol)) {
-      if (
-        !mismoMunicipio(
-          solicitud.solicitante.usuario?.municipio,
-          usuario.municipio,
-        )
-      ) {
-        throw new ForbiddenException(
-          'Solo puedes acceder a solicitudes de tu municipio',
-        );
-      }
-      return;
-    }
-    if (usuario?.rol === RolUsuario.DIRECTOR_CIRCULO && usuario.perfil) {
-      if (
-        solicitud.solicitante.usuario?.municipio !== usuario.perfil.municipio
-      ) {
-        throw new ForbiddenException(
-          'Solo puedes acceder a solicitudes de tu municipio',
-        );
-      }
-      return;
-    }
+
+    // 2. Solicitante
     if (usuario?.rol === RolUsuario.SOLICITANTE) {
-      if (solicitud.solicitanteId !== usuario.perfilId) {
+      if (!usuario.perfilId || solicitud.solicitanteId !== usuario.perfilId) {
         throw new ForbiddenException(
           'Solo puedes acceder a tus propias solicitudes',
         );
       }
       return;
     }
+
+    // 3. Funcionario Municipal y Comisión de Otorgamiento: mismo criterio
+    if (
+      usuario?.rol === RolUsuario.FUNCIONARIO_MUNICIPAL ||
+      usuario?.rol === RolUsuario.COMISION_OTORGAMIENTO
+    ) {
+      if (!mismoMunicipio(municipioDeSolicitud(solicitud), usuario.municipio)) {
+        throw new ForbiddenException(
+          'Solo puedes acceder a solicitudes de tu municipio',
+        );
+      }
+      return;
+    }
+
+    // 4. Director de Círculo: solo solicitudes de su propio círculo
+    if (usuario?.rol === RolUsuario.DIRECTOR_CIRCULO && usuario.perfil) {
+      const circuloIdDirector =
+        usuario.perfil.circuloId ?? usuario.perfil.circulo?.id;
+      if (circuloIdDirector !== solicitud.circuloId) {
+        throw new ForbiddenException(
+          'Solo puedes acceder a solicitudes de tu círculo',
+        );
+      }
+      return;
+    }
+
     throw new ForbiddenException(
       'No tienes permiso para acceder a esta solicitud',
     );
@@ -1004,17 +1077,16 @@ export class SolicitudService {
         tipoPersona: solicitud.solicitante.tipoPersona,
         cantHijos: solicitud.solicitante.cantHijos,
         centroTrabajo: solicitud.solicitante.centroTrabajo,
-        municipio: solicitud.solicitante.usuario?.municipio,
-        provincia: solicitud.solicitante.usuario?.provincia,
+        municipio: solicitud.solicitante.usuario?.municipioRel?.nombre,
+        provincia: solicitud.solicitante.usuario?.provinciaRel?.nombre,
       },
-      // 🔥 NUEVO
       circulo: solicitud.circulo
         ? {
             id: solicitud.circulo.id,
             nombre: solicitud.circulo.nombre,
             direccion: solicitud.circulo.direccion,
-            municipio: solicitud.circulo.municipio,
-            provincia: solicitud.circulo.provincia,
+            municipio: solicitud.circulo.municipioRel?.nombre,
+            provincia: solicitud.circulo.provinciaRel?.nombre,
             tipo: solicitud.circulo.tipo,
             tieneSextoAnio: solicitud.circulo.tieneSextoAnio,
           }

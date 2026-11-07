@@ -113,10 +113,20 @@ export class DocumentoService {
       where: { id },
       include: {
         solicitud: {
+<<<<<<< HEAD
           select: {
             solicitanteId: true,
             solicitante: {
               select: { usuario: { select: { municipio: true } } },
+=======
+          include: {
+            solicitante: {
+              include: {
+                usuario: {
+                  include: { municipioRel: true },
+                },
+              },
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
             },
           },
         },
@@ -129,7 +139,12 @@ export class DocumentoService {
 
     this.verificarAcceso(documento.solicitud.solicitanteId, usuario);
     this.verificarMunicipio(
+<<<<<<< HEAD
       documento.solicitud.solicitante?.usuario?.municipio,
+=======
+      documento.solicitud.solicitante?.usuario?.municipioRel?.nombre ??
+        undefined,
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
       usuario,
     );
 

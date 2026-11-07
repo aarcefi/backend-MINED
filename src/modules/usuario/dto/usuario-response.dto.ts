@@ -14,6 +14,12 @@ export class UsuarioResponseDto {
   @ApiProperty()
   activo: boolean;
 
+  @ApiProperty()
+  municipio?: string | null;
+
+  @ApiProperty()
+  provincia?: string | null;
+
   @ApiPropertyOptional({
     description: 'Perfil del solicitante (solo si rol es SOLICITANTE)',
   })

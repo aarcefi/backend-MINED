@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+=======
+/* eslint-disable prettier/prettier */
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import {
@@ -135,6 +139,7 @@ export class PerfilesService {
     const usuarios = await this.prisma.usuario.findMany({
       where: {
         rol: RolUsuario.FUNCIONARIO_MUNICIPAL,
+<<<<<<< HEAD
         municipio: { contains: municipio, mode: 'insensitive' },
       },
       include: {
@@ -144,6 +149,18 @@ export class PerfilesService {
             controles: true,
           },
         },
+=======
+        municipioRel: {
+          nombre: { contains: municipio, mode: 'insensitive' },
+        },
+      },
+      include: {
+        perfilFuncionario: {
+          include: { documentosVal: true, controles: true },
+        },
+        municipioRel: true,
+        provinciaRel: true,
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
       },
     });
 
@@ -156,8 +173,13 @@ export class PerfilesService {
         apellidos: usuario.apellidos,
         carnetIdentidad: usuario.carnetIdentidad,
         telefono: usuario.telefono,
+<<<<<<< HEAD
         municipio: usuario.municipio,
         provincia: usuario.provincia,
+=======
+        municipio: usuario.municipioRel?.nombre ?? null,
+        provincia: usuario.provinciaRel?.nombre ?? null,
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
       },
     }));
   }
@@ -219,6 +241,7 @@ export class PerfilesService {
     const usuarios = await this.prisma.usuario.findMany({
       where: {
         rol: RolUsuario.COMISION_OTORGAMIENTO,
+<<<<<<< HEAD
         municipio: { contains: municipio, mode: 'insensitive' },
       },
       include: {
@@ -227,6 +250,16 @@ export class PerfilesService {
             decisiones: true,
           },
         },
+=======
+        municipioRel: {
+          nombre: { contains: municipio, mode: 'insensitive' },
+        },
+      },
+      include: {
+        perfilComision: { include: { decisiones: true } },
+        municipioRel: true,
+        provinciaRel: true,
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
       },
     });
 
@@ -239,8 +272,13 @@ export class PerfilesService {
         apellidos: usuario.apellidos,
         carnetIdentidad: usuario.carnetIdentidad,
         telefono: usuario.telefono,
+<<<<<<< HEAD
         municipio: usuario.municipio,
         provincia: usuario.provincia,
+=======
+        municipio: usuario.municipioRel?.nombre ?? null,
+        provincia: usuario.provinciaRel?.nombre ?? null,
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
       },
     }));
   }
@@ -252,7 +290,11 @@ export class PerfilesService {
   ) {
     const usuario = await this.prisma.usuario.findUnique({
       where: { id: usuarioId },
+<<<<<<< HEAD
       include: { perfilComision: true },
+=======
+      include: { perfilComision: true, municipioRel: true,},
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
     });
 
     if (!usuario) {
@@ -268,6 +310,7 @@ export class PerfilesService {
     }
 
     const where: any = {
+<<<<<<< HEAD
       estado: EstadoSolicitud.APROBADA_COMISION,
       circulo: {
         is: {
@@ -280,6 +323,20 @@ export class PerfilesService {
       matricula: {
         isNot: null,
       },
+=======
+        estado: EstadoSolicitud.APROBADA_COMISION,
+        circulo: {
+          is: {
+            municipioRel: {                                    
+              nombre: {
+                contains: usuario.municipioRel?.nombre ?? '',  
+                mode: 'insensitive',
+              },
+            },
+          },
+        },
+        matricula: { isNot: null },
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
     };
 
     if (fechaDesde || fechaHasta) {
@@ -312,7 +369,11 @@ export class PerfilesService {
     });
 
     return {
+<<<<<<< HEAD
       municipio: usuario.municipio,
+=======
+      municipio: usuario.municipioRel?.nombre ?? null,
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
       comisionId: usuario.perfilComision.id,
       comisionNombre: `${usuario.nombre} ${usuario.apellidos}`,
       totalSolicitudesAprobadas: total,
@@ -410,7 +471,13 @@ export class PerfilesService {
     const usuarios = await this.prisma.usuario.findMany({
       where: {
         rol: RolUsuario.DIRECTOR_CIRCULO,
+<<<<<<< HEAD
         municipio: { contains: municipio, mode: 'insensitive' },
+=======
+        municipioRel: { 
+          nombre: {contains: municipio, mode: 'insensitive' },
+        }, 
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
       },
       include: {
         perfilDirector: {
@@ -418,6 +485,11 @@ export class PerfilesService {
             circulo: true,
           },
         },
+<<<<<<< HEAD
+=======
+        municipioRel: true,
+        provinciaRel: true,
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
       },
     });
 
@@ -430,8 +502,13 @@ export class PerfilesService {
         apellidos: usuario.apellidos,
         carnetIdentidad: usuario.carnetIdentidad,
         telefono: usuario.telefono,
+<<<<<<< HEAD
         municipio: usuario.municipio,
         provincia: usuario.provincia,
+=======
+        municipio: usuario.municipioRel?.nombre ?? null, 
+        provincia: usuario.provinciaRel?.nombre ?? null,
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
       },
     }));
   }
@@ -450,8 +527,13 @@ export class PerfilesService {
       apellidos: usuario.apellidos,
       carnetIdentidad: usuario.carnetIdentidad,
       telefono: usuario.telefono,
+<<<<<<< HEAD
       municipio: usuario.municipio,
       provincia: usuario.provincia,
+=======
+      municipio: usuario.municipioRel?.nombre ?? null,
+      provincia: usuario.provinciaRel?.nombre ?? null,
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
     };
 
     if (usuario.perfilSolicitante) {
@@ -480,7 +562,11 @@ export class PerfilesService {
 
     if (usuario.perfilDirector) {
       return {
+<<<<<<< HEAD
         ...usuario.perfilDirector, // incluye circulo gracias a getProfile
+=======
+        ...usuario.perfilDirector,
+>>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
         usuario: baseUser,
         notificaciones: usuario.notificaciones,
       };

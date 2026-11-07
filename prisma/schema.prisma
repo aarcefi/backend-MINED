@@ -119,8 +119,8 @@ model Usuario {
   apellidos       String
   carnetIdentidad String    @unique
   telefono        String?
-  municipio       String
-  provincia       String
+  provinciaId String?     @db.Uuid
+  municipioId String?     @db.Uuid
   activo          Boolean   @default(true)
   createdAt       DateTime  @default(now()) @db.Timestamp
   updatedAt       DateTime  @updatedAt @db.Timestamp
@@ -140,6 +140,12 @@ model Usuario {
   trasladosRespondidos TrasladoSolicitud[] @relation("traslado_respondido_por")
 
     trazas          Trazabilidad[]
+
+  provinciaRel Provincia? @relation(fields: [provinciaId], references: [id])
+  municipioRel Municipio? @relation(fields: [municipioId], references: [id])
+
+  @@index([municipioId])
+  @@index([provinciaId])
 
   @@map("usuarios")
 }
@@ -227,8 +233,8 @@ model CirculoInfantil {
   id              String             @id @default(uuid()) @db.Uuid
   nombre          String
   direccion       String
-  municipio       String
-  provincia       String
+  provinciaId String?     @db.Uuid
+  municipioId String?     @db.Uuid
   capacidadTotal  Int
   tipo            TipoCirculo
   activo          Boolean            @default(true)
@@ -242,6 +248,12 @@ model CirculoInfantil {
   director        PerfilDirector?    @relation("director_circulo")
   trasladosOrigen  TrasladoSolicitud[] @relation("traslado_circulo_origen")
   trasladosDestino TrasladoSolicitud[] @relation("traslado_circulo_destino")
+
+  provinciaRel Provincia? @relation(fields: [provinciaId], references: [id])
+  municipioRel Municipio? @relation(fields: [municipioId], references: [id])
+
+  @@index([municipioId])
+  @@index([provinciaId])
 
   @@map("circulos_infantiles")
 }
@@ -479,4 +491,32 @@ model Ciudadano {
   updatedAt       DateTime  @updatedAt @default(now()) @map("updated_at")
 
   @@map("ciudadanos")
+}
+
+model Provincia {
+  id         String      @id @default(uuid()) @db.Uuid
+  nombre     String      @unique
+  municipios Municipio[]
+  createdAt  DateTime    @default(now()) @db.Timestamp
+  updatedAt  DateTime    @updatedAt @db.Timestamp
+
+  usuarios   Usuario[]
+  circulos   CirculoInfantil[]
+
+  @@map("provincias")
+}
+
+model Municipio {
+  id          String    @id @default(uuid()) @db.Uuid
+  nombre      String
+  provinciaId String    @db.Uuid
+  provincia   Provincia @relation(fields: [provinciaId], references: [id], onDelete: Restrict)
+  createdAt   DateTime  @default(now()) @db.Timestamp
+  updatedAt   DateTime  @updatedAt @db.Timestamp
+
+  usuarios   Usuario[]
+  circulos   CirculoInfantil[]
+
+  @@unique([provinciaId, nombre])
+  @@map("municipios")
 }
