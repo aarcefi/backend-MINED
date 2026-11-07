@@ -191,8 +191,26 @@ model PerfilComision {
   // Relaciones
   usuario         Usuario         @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
   decisiones      DecisionSolicitud[]
+  configuracionesPrioridad ConfiguracionPrioridadComision[]
 
   @@map("perfiles_comisiones")
+}
+
+model ConfiguracionPrioridadComision {
+  id                 String          @id @default(uuid()) @db.Uuid
+  comisionId         String          @db.Uuid
+  periodoId          String          @db.Uuid
+  sectorPrioritario1 SectorPrioridad
+  sectorPrioritario2 SectorPrioridad?
+  sectorPrioritario3 SectorPrioridad?
+  createdAt          DateTime        @default(now()) @db.Timestamp
+  updatedAt          DateTime        @updatedAt @db.Timestamp
+
+  comision PerfilComision      @relation(fields: [comisionId], references: [id], onDelete: Cascade)
+  periodo  PeriodoOtorgamiento @relation(fields: [periodoId], references: [id], onDelete: Cascade)
+
+  @@unique([comisionId, periodoId])
+  @@map("configuraciones_prioridad_comision")
 }
 
 // Tabla: Perfil de Directores de Circulos
@@ -270,6 +288,7 @@ model PeriodoOtorgamiento {
   // Relaciones
   solicitudes     Solicitud[]
   sesiones        SesionComision[]
+  configuracionesPrioridad ConfiguracionPrioridadComision[]
 
   @@map("periodos_otorgamiento")
 }

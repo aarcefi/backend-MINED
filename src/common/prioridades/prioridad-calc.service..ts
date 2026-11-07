@@ -5,6 +5,7 @@ import { TipoSolicitudPriorityStrategy } from './strategies/tipo-solicitud-prior
 import { CasoEspecialPriorityStrategy } from './strategies/caso-especial-priority.strategy';
 import { TipoNecesidadPriorityStrategy } from './strategies/tipo-necesidad-priority.strategy';
 import { CantHijosPriorityStrategy } from './strategies/cant-hijos-priority.strategy';
+import { MultiplesHijosEdadCirculoPriorityStrategy } from './strategies/multiples-hijos-edad-circulo-priority.strategy';
 
 @Injectable()
 export class PriorityCalculator {
@@ -17,6 +18,7 @@ export class PriorityCalculator {
     this.registerStrategy(new CasoEspecialPriorityStrategy());
     this.registerStrategy(new TipoNecesidadPriorityStrategy());
     this.registerStrategy(new CantHijosPriorityStrategy());
+    this.registerStrategy(new MultiplesHijosEdadCirculoPriorityStrategy());
   }
 
   /**

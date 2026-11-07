@@ -161,6 +161,14 @@ export class SolicitudService {
       );
     }
 
+    const municipioResponsableId =
+      circuloSolicitado?.municipioId ?? solicitante.usuario.municipioId ?? null;
+
+    const configuracionPrioridad = await this.cargarConfiguracionPrioridad(
+      municipioResponsableId,
+      periodoActivo.id,
+    );
+
     const context: PriorityContext = {
       sector: data.sector,
       tipoSolicitud: data.tipoSolicitud,
@@ -171,6 +179,7 @@ export class SolicitudService {
       solicitante: {
         cantHijos: solicitante.cantHijos,
       },
+      configuracionPrioridad,
     };
     const prioridad = this.priorityCalculator.calculatePriority(context);
 
@@ -488,6 +497,16 @@ export class SolicitudService {
     const necesitaRecalcular =
       data.sector !== undefined || data.tipoSolicitud !== undefined;
     if (necesitaRecalcular) {
+      const municipioResponsableId =
+        solicitud.circulo?.municipioId ??
+        solicitud.solicitante.usuario.municipioId ??
+        null;
+
+      const configuracionPrioridad = await this.cargarConfiguracionPrioridad(
+        municipioResponsableId,
+        solicitud.periodoId,
+      );
+
       const context: PriorityContext = {
         sector: data.sector ?? solicitud.sector,
         tipoSolicitud: data.tipoSolicitud ?? solicitud.tipoSolicitud,
@@ -498,6 +517,7 @@ export class SolicitudService {
         solicitante: {
           cantHijos: solicitud.solicitante.cantHijos,
         },
+        configuracionPrioridad,
       };
       updateData.prioridad = this.priorityCalculator.calculatePriority(context);
     }
@@ -593,6 +613,16 @@ export class SolicitudService {
       updateNinoDto.tipoNecesidad !== undefined;
 
     if (necesitaRecalcular) {
+      const municipioResponsableId =
+        solicitud.circulo?.municipioId ??
+        solicitud.solicitante.usuario.municipioId ??
+        null;
+
+      const configuracionPrioridad = await this.cargarConfiguracionPrioridad(
+        municipioResponsableId,
+        solicitud.periodoId,
+      );
+
       const context: PriorityContext = {
         sector: solicitud.sector,
         tipoSolicitud: solicitud.tipoSolicitud,
@@ -603,6 +633,7 @@ export class SolicitudService {
         solicitante: {
           cantHijos: solicitud.solicitante.cantHijos,
         },
+        configuracionPrioridad,
       };
       const nuevaPrioridad = this.priorityCalculator.calculatePriority(context);
       await this.prisma.solicitud.update({
@@ -796,6 +827,43 @@ export class SolicitudService {
 
   // ========== Métodos auxiliares ==========
 
+  private async cargarConfiguracionPrioridad(
+    municipioId: string | null,
+    periodoId: string,
+  ): Promise<{
+    sector1: string | null;
+    sector2: string | null;
+    sector3: string | null;
+  } | null> {
+    if (!municipioId) return null;
+
+    const comisionUsuario = await this.prisma.usuario.findFirst({
+      where: {
+        rol: RolUsuario.COMISION_OTORGAMIENTO,
+        municipioId,
+        activo: true,
+      },
+      include: { perfilComision: true },
+    });
+    if (!comisionUsuario?.perfilComision) return null;
+
+    const config = await this.prisma.configuracionPrioridadComision.findUnique({
+      where: {
+        comisionId_periodoId: {
+          comisionId: comisionUsuario.perfilComision.id,
+          periodoId,
+        },
+      },
+    });
+    if (!config) return null;
+
+    return {
+      sector1: config.sectorPrioritario1,
+      sector2: config.sectorPrioritario2,
+      sector3: config.sectorPrioritario3,
+    };
+  }
+
   // Aviso interno: si falla, la operación principal ya está hecha y no se revierte
   private async notificarPersonal(
     rol: RolUsuario,
@@ -966,6 +1034,57 @@ export class SolicitudService {
       sinDecision,
       porcentajeConDecision: total > 0 ? (conDecision / total) * 100 : 0,
     };
+  }
+
+  async recalcularPrioridadesPeriodo(periodoId: string): Promise<{
+    actualizadas: number;
+  }> {
+    const solicitudes = await this.prisma.solicitud.findMany({
+      where: {
+        periodoId,
+        estado: { in: ['EN_REVISION', 'EN_ESPERA'] },
+      },
+      include: {
+        nino: true,
+        solicitante: {
+          include: { usuario: true },
+        },
+        circulo: true,
+      },
+    });
+
+    let actualizadas = 0;
+    for (const s of solicitudes) {
+      const municipioResponsableId =
+        s.circulo?.municipioId ?? s.solicitante.usuario.municipioId ?? null;
+
+      const configuracionPrioridad = await this.cargarConfiguracionPrioridad(
+        municipioResponsableId,
+        periodoId,
+      );
+
+      const context: PriorityContext = {
+        sector: s.sector,
+        tipoSolicitud: s.tipoSolicitud,
+        nino: {
+          casoEspecial: s.nino.casoEspecial,
+          tipoNecesidad: s.nino.tipoNecesidad ?? undefined,
+        },
+        solicitante: { cantHijos: s.solicitante.cantHijos },
+        configuracionPrioridad,
+      };
+      const nueva = this.priorityCalculator.calculatePriority(context);
+
+      if (nueva !== s.prioridad) {
+        await this.prisma.solicitud.update({
+          where: { id: s.id },
+          data: { prioridad: nueva },
+        });
+        actualizadas++;
+      }
+    }
+
+    return { actualizadas };
   }
 
   // ========== Métodos privados ==========

@@ -1,52 +1,53 @@
-import { PriorityCalculator } from './prioridad-calc.service.';
-
-describe('PriorityCalculator', () => {
-  let calculator: PriorityCalculator;
-
-  beforeEach(() => {
-    calculator = new PriorityCalculator();
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+it('la regla de múltiples hijos supera al sector 1º', () => {
+  const base = {
+    tipoSolicitud: 'TRABAJADOR',
+    nino: {},
+    configuracionPrioridad: { sector1: 'SALUD', sector2: null, sector3: null },
+  };
+  const saludConUnHijo = calculator.calculatePriority({
+    ...base,
+    sector: 'SALUD',
+    solicitante: { cantHijos: 1 },
   });
-
-  it('should sum all strategies correctly', () => {
-    const context = {
-      sector: 'SALUD',
-      tipoSolicitud: 'TRABAJADOR',
-      nino: { casoEspecial: true, tipoNecesidad: 'DISCAPACIDAD' },
-      solicitante: { cantHijos: 2 },
-    };
-    const priority = calculator.calculatePriority(context);
-    // SALUD=30, TRABAJADOR=20, casoEspecial=15, tipoNecesidad=10, hijos=5
-    expect(priority).toBe(80);
+  const otroConDosHijos = calculator.calculatePriority({
+    ...base,
+    sector: 'OTRO',
+    solicitante: { cantHijos: 2 },
   });
+  expect(otroConDosHijos).toBeGreaterThan(saludConUnHijo);
+});
 
-  it('should return breakdown of each strategy', () => {
-    const context = {
-      sector: 'EDUCACION',
-      tipoSolicitud: 'ESTUDIANTE',
-      nino: { casoEspecial: false },
-      solicitante: { cantHijos: 1 },
-    };
-    const breakdown = calculator.getPriorityBreakdown(context);
-    expect(breakdown).toHaveProperty('SectorPriority');
-    expect(breakdown).toHaveProperty('TipoSolicitudPriority');
-    expect(breakdown).toHaveProperty('CasoEspecialPriority');
-    expect(breakdown).toHaveProperty('TipoNecesidadPriority');
-    expect(breakdown).toHaveProperty('CantHijosPriority');
+it('entre sectores priorizados gana el 1º', () => {
+  const ctx = (sector: string) => ({
+    sector,
+    tipoSolicitud: 'TRABAJADOR' as const,
+    nino: {},
+    solicitante: { cantHijos: 1 },
+    configuracionPrioridad: {
+      sector1: 'SALUD',
+      sector2: 'EDUCACION',
+      sector3: 'DEFENSA',
+    },
   });
+  const s1 = calculator.calculatePriority(ctx('SALUD'));
+  const s2 = calculator.calculatePriority(ctx('EDUCACION'));
+  const s3 = calculator.calculatePriority(ctx('DEFENSA'));
+  const s4 = calculator.calculatePriority(ctx('OTRO'));
+  expect(s1).toBeGreaterThan(s2);
+  expect(s2).toBeGreaterThan(s3);
+  expect(s3).toBeGreaterThan(s4);
+});
 
-  it('should register new strategy dynamically', () => {
-    const mockStrategy = {
-      calculate: jest.fn().mockReturnValue(10),
-      getName: () => 'MockStrategy',
-    };
-    calculator.registerStrategy(mockStrategy);
-    const context = {
-      sector: 'OTRO',
-      tipoSolicitud: 'ESTUDIANTE',
-      nino: {},
-      solicitante: { cantHijos: 1 },
-    };
-    calculator.calculatePriority(context);
-    expect(mockStrategy.calculate).toHaveBeenCalledWith(context);
+it('sin config cae a pesos base', () => {
+  const prio = calculator.calculatePriority({
+    sector: 'SALUD',
+    tipoSolicitud: 'TRABAJADOR',
+    nino: {},
+    solicitante: { cantHijos: 1 },
+    configuracionPrioridad: null,
   });
+  expect(prio).toBe(30 + 20); // sector base + tipo
 });

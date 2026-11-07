@@ -404,6 +404,13 @@ export class SolicitudController {
     );
   }
 
+  @Post('recalcular-prioridades/:periodoId')
+  @Roles(RolUsuario.ADMINISTRADOR, RolUsuario.COMISION_OTORGAMIENTO)
+  @ApiOperation({ summary: 'Recalcular prioridades de un período' })
+  recalcularPrioridades(@Param('periodoId', ParseUUIDPipe) periodoId: string) {
+    return this.solicitudService.recalcularPrioridadesPeriodo(periodoId);
+  }
+
   @Delete(':id')
   @Roles(
     RolUsuario.ADMINISTRADOR,

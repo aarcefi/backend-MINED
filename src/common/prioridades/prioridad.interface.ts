@@ -1,3 +1,9 @@
+export interface ConfiguracionPrioridadContexto {
+  sector1?: string | null;
+  sector2?: string | null;
+  sector3?: string | null;
+}
+
 export interface PriorityContext {
   sector: string;
   tipoSolicitud: string;
@@ -9,6 +15,7 @@ export interface PriorityContext {
     cantHijos: number;
   };
   [key: string]: any;
+  configuracionPrioridad?: ConfiguracionPrioridadContexto | null;
 }
 
 export interface PriorityStrategy {

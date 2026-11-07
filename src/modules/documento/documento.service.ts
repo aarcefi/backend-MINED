@@ -1,3 +1,8 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 import {
   BadRequestException,
   ForbiddenException,
@@ -113,12 +118,6 @@ export class DocumentoService {
       where: { id },
       include: {
         solicitud: {
-<<<<<<< HEAD
-          select: {
-            solicitanteId: true,
-            solicitante: {
-              select: { usuario: { select: { municipio: true } } },
-=======
           include: {
             solicitante: {
               include: {
@@ -126,7 +125,6 @@ export class DocumentoService {
                   include: { municipioRel: true },
                 },
               },
->>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
             },
           },
         },
@@ -139,12 +137,8 @@ export class DocumentoService {
 
     this.verificarAcceso(documento.solicitud.solicitanteId, usuario);
     this.verificarMunicipio(
-<<<<<<< HEAD
-      documento.solicitud.solicitante?.usuario?.municipio,
-=======
       documento.solicitud.solicitante?.usuario?.municipioRel?.nombre ??
         undefined,
->>>>>>> 26718b1 (Arreglado errores con provincias y municipios)
       usuario,
     );
 

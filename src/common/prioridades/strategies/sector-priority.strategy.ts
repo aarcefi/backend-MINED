@@ -9,7 +9,17 @@ export class SectorPriorityStrategy implements PriorityStrategy {
     OTRO: 10,
   };
 
+  private readonly pesosPrioritarios = [1000, 500, 250];
+
   calculate(context: PriorityContext): number {
+    const config = context.configuracionPrioridad;
+    if (config) {
+      const priorizados = [config.sector1, config.sector2, config.sector3];
+      const idx = priorizados.findIndex((s) => s && s === context.sector);
+      if (idx !== -1) {
+        return this.pesosPrioritarios[idx];
+      }
+    }
     return this.sectorScores[context.sector] || 10;
   }
 

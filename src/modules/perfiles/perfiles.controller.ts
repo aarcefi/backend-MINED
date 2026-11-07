@@ -1,12 +1,22 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-import { Controller, Get, Param, UseGuards, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  UseGuards,
+  Query,
+  Post,
+  Body,
+  Request,
+} from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
   ApiBearerAuth,
   ApiQuery,
   ApiResponse,
+  ApiBody,
 } from '@nestjs/swagger';
 import { PerfilesService } from './perfiles.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
@@ -14,6 +24,7 @@ import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { RolUsuario } from '@prisma/client';
 import { GetUser } from 'src/auth/decorators/get-user.decorator';
+import { ConfigurarPrioridadDto } from './perfil-comision/dto/configurar-prioridad.dto';
 
 @ApiTags('Perfiles')
 @ApiBearerAuth()
@@ -122,6 +133,29 @@ export class PerfilesController {
       usuario.id,
       fechaDesde ? new Date(fechaDesde) : undefined,
       fechaHasta ? new Date(fechaHasta) : undefined,
+    );
+  }
+
+  @Post('comision/prioridad')
+  @Roles(RolUsuario.COMISION_OTORGAMIENTO)
+  @ApiOperation({
+    summary: 'Configurar los 3 sectores prioritarios del período',
+  })
+  @ApiBody({ type: ConfigurarPrioridadDto })
+  @ApiResponse({ status: 200, description: 'Configuración guardada' })
+  @ApiResponse({ status: 400, description: 'Sectores duplicados o inválidos' })
+  configurarPrioridad(@Request() req, @Body() dto: ConfigurarPrioridadDto) {
+    return this.perfilesService.configurarPrioridadComision(req.user.id, dto);
+  }
+
+  @Get('comision/prioridad')
+  @Roles(RolUsuario.COMISION_OTORGAMIENTO)
+  @ApiOperation({ summary: 'Obtener la configuración de prioridades' })
+  @ApiQuery({ name: 'periodoId', required: false, format: 'uuid' })
+  obtenerPrioridad(@Request() req, @Query('periodoId') periodoId?: string) {
+    return this.perfilesService.obtenerPrioridadComision(
+      req.user.id,
+      periodoId,
     );
   }
 
