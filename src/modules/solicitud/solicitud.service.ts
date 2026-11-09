@@ -1036,57 +1036,6 @@ export class SolicitudService {
     };
   }
 
-  async recalcularPrioridadesPeriodo(periodoId: string): Promise<{
-    actualizadas: number;
-  }> {
-    const solicitudes = await this.prisma.solicitud.findMany({
-      where: {
-        periodoId,
-        estado: { in: ['EN_REVISION', 'EN_ESPERA'] },
-      },
-      include: {
-        nino: true,
-        solicitante: {
-          include: { usuario: true },
-        },
-        circulo: true,
-      },
-    });
-
-    let actualizadas = 0;
-    for (const s of solicitudes) {
-      const municipioResponsableId =
-        s.circulo?.municipioId ?? s.solicitante.usuario.municipioId ?? null;
-
-      const configuracionPrioridad = await this.cargarConfiguracionPrioridad(
-        municipioResponsableId,
-        periodoId,
-      );
-
-      const context: PriorityContext = {
-        sector: s.sector,
-        tipoSolicitud: s.tipoSolicitud,
-        nino: {
-          casoEspecial: s.nino.casoEspecial,
-          tipoNecesidad: s.nino.tipoNecesidad ?? undefined,
-        },
-        solicitante: { cantHijos: s.solicitante.cantHijos },
-        configuracionPrioridad,
-      };
-      const nueva = this.priorityCalculator.calculatePriority(context);
-
-      if (nueva !== s.prioridad) {
-        await this.prisma.solicitud.update({
-          where: { id: s.id },
-          data: { prioridad: nueva },
-        });
-        actualizadas++;
-      }
-    }
-
-    return { actualizadas };
-  }
-
   // ========== Métodos privados ==========
 
   private verificarPermisosSolicitud(solicitud: any, usuario: any): void {

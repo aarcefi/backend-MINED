@@ -3,10 +3,6 @@ import { SectorPrioridad } from '@prisma/client';
 import { IsEnum, IsOptional, IsUUID } from 'class-validator';
 
 export class ConfigurarPrioridadDto {
-  @ApiProperty({ example: 'uuid-del-periodo', format: 'uuid' })
-  @IsUUID()
-  periodoId: string;
-
   @ApiProperty({ enum: SectorPrioridad, example: 'SALUD' })
   @IsEnum(SectorPrioridad)
   sectorPrioritario1: SectorPrioridad;
@@ -20,4 +16,12 @@ export class ConfigurarPrioridadDto {
   @IsOptional()
   @IsEnum(SectorPrioridad)
   sectorPrioritario3?: SectorPrioridad;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Por defecto, el período activo',
+  })
+  @IsOptional()
+  @IsUUID()
+  periodoId?: string;
 }

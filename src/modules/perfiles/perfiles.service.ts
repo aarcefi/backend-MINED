@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import {
@@ -20,6 +18,7 @@ import { EstadoSolicitud, RolUsuario } from '@prisma/client';
 import { CirculoInfantilService } from '../circulo-infantil/circulo-infantil.service';
 import { UsuariosService } from '../usuario/usuarios.service';
 import { ConfigurarPrioridadDto } from './perfil-comision/dto/configurar-prioridad.dto';
+import { PriorityCalculator } from '../../common/prioridades/prioridad-calc.service.';
 
 @Injectable()
 export class PerfilesService {
@@ -28,6 +27,7 @@ export class PerfilesService {
     private circuloService: CirculoInfantilService,
     @Inject(forwardRef(() => UsuariosService))
     private usuariosService: UsuariosService,
+    private priorityCalculator: PriorityCalculator,
   ) {}
   // PERFIL SOLICITANTE
   async createPerfilSolicitante(
@@ -331,6 +331,7 @@ export class PerfilesService {
     usuarioId: string,
     dto: ConfigurarPrioridadDto,
   ) {
+    // 1) Cargar usuario + perfil + municipioId
     const usuario = await this.prisma.usuario.findUnique({
       where: { id: usuarioId },
       include: { perfilComision: true },
@@ -343,7 +344,12 @@ export class PerfilesService {
     if (!usuario.perfilComision) {
       throw new NotFoundException('Perfil de comisión no encontrado');
     }
+    if (!usuario.municipioId) {
+      throw new BadRequestException('El usuario no tiene municipio asignado');
+    }
+    const municipioId = usuario.municipioId;
 
+    // 2) Validar sectores distintos
     const sectores = [
       dto.sectorPrioritario1,
       dto.sectorPrioritario2,
@@ -353,31 +359,114 @@ export class PerfilesService {
       throw new BadRequestException('Los 3 sectores deben ser distintos');
     }
 
-    const periodo = await this.prisma.periodoOtorgamiento.findUnique({
-      where: { id: dto.periodoId },
-    });
-    if (!periodo) throw new NotFoundException('Período no encontrado');
+    // 3) Resolver período (body o activo)
+    let periodoId = dto.periodoId;
+    if (!periodoId) {
+      const periodoActivo = await this.prisma.periodoOtorgamiento.findFirst({
+        where: { activo: true },
+        orderBy: { fechaInicio: 'desc' },
+      });
+      if (!periodoActivo) {
+        throw new BadRequestException(
+          'No hay período de otorgamiento activo para configurar',
+        );
+      }
+      periodoId = periodoActivo.id;
+    } else {
+      const periodo = await this.prisma.periodoOtorgamiento.findUnique({
+        where: { id: periodoId },
+      });
+      if (!periodo) throw new NotFoundException('Período no encontrado');
+    }
 
-    return this.prisma.configuracionPrioridadComision.upsert({
-      where: {
-        comisionId_periodoId: {
-          comisionId: usuario.perfilComision.id,
-          periodoId: dto.periodoId,
+    // 4) Upsert de la configuración
+    const configuracion =
+      await this.prisma.configuracionPrioridadComision.upsert({
+        where: {
+          comisionId_periodoId: {
+            comisionId: usuario.perfilComision.id,
+            periodoId,
+          },
         },
+        create: {
+          comisionId: usuario.perfilComision.id,
+          periodoId,
+          sectorPrioritario1: dto.sectorPrioritario1,
+          sectorPrioritario2: dto.sectorPrioritario2 ?? null,
+          sectorPrioritario3: dto.sectorPrioritario3 ?? null,
+        },
+        update: {
+          sectorPrioritario1: dto.sectorPrioritario1,
+          sectorPrioritario2: dto.sectorPrioritario2 ?? null,
+          sectorPrioritario3: dto.sectorPrioritario3 ?? null,
+        },
+      });
+
+    // 5) Recalcular solicitudes del municipio (círculo o, si no, solicitante)
+    const configuracionPrioridad = {
+      sector1: configuracion.sectorPrioritario1,
+      sector2: configuracion.sectorPrioritario2,
+      sector3: configuracion.sectorPrioritario3,
+    };
+
+    const solicitudes = await this.prisma.solicitud.findMany({
+      where: {
+        periodoId,
+        estado: {
+          in: [
+            EstadoSolicitud.EN_REVISION,
+            EstadoSolicitud.APROBADA_DIRECCION,
+            EstadoSolicitud.EN_ESPERA,
+          ],
+        },
+        OR: [
+          { circulo: { municipioId } },
+          {
+            circuloId: null,
+            solicitante: { usuario: { municipioId } },
+          },
+        ],
       },
-      create: {
-        comisionId: usuario.perfilComision.id,
-        periodoId: dto.periodoId,
-        sectorPrioritario1: dto.sectorPrioritario1,
-        sectorPrioritario2: dto.sectorPrioritario2 ?? null,
-        sectorPrioritario3: dto.sectorPrioritario3 ?? null,
-      },
-      update: {
-        sectorPrioritario1: dto.sectorPrioritario1,
-        sectorPrioritario2: dto.sectorPrioritario2 ?? null,
-        sectorPrioritario3: dto.sectorPrioritario3 ?? null,
+      include: {
+        nino: true,
+        solicitante: { include: { usuario: true } },
       },
     });
+
+    const updates: any[] = [];
+    for (const s of solicitudes) {
+      const nueva = this.priorityCalculator.calculatePriority({
+        sector: s.sector,
+        tipoSolicitud: s.tipoSolicitud,
+        nino: {
+          casoEspecial: s.nino.casoEspecial,
+          tipoNecesidad: s.nino.tipoNecesidad ?? undefined,
+        },
+        solicitante: { cantHijos: s.solicitante.cantHijos },
+        configuracionPrioridad,
+      });
+      if (nueva !== s.prioridad) {
+        updates.push(
+          this.prisma.solicitud.update({
+            where: { id: s.id },
+            data: { prioridad: nueva },
+          }),
+        );
+      }
+    }
+
+    if (updates.length > 0) {
+      await this.prisma.$transaction(updates);
+    }
+
+    return {
+      configuracion,
+      recalculo: {
+        solicitudesActualizadas: updates.length,
+        solicitudesSinCambio: solicitudes.length - updates.length,
+        totalEvaluadas: solicitudes.length,
+      },
+    };
   }
 
   async obtenerPrioridadComision(usuarioId: string, periodoId?: string) {

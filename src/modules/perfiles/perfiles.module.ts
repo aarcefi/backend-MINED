@@ -4,10 +4,12 @@ import { PerfilesController } from './perfiles.controller';
 import { PrismaModule } from '../../../prisma/prisma.module';
 import { CirculoInfantilModule } from '../circulo-infantil/circulo-infantil.module';
 import { UsuariosModule } from '../usuario/usuarios.module';
+import { PriorityModule } from 'src/common/prioridades/prioridad.module';
 
 @Module({
   imports: [
     PrismaModule,
+    PriorityModule,
     CirculoInfantilModule,
     forwardRef(() => UsuariosModule),
   ],

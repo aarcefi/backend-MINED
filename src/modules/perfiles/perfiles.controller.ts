@@ -139,24 +139,37 @@ export class PerfilesController {
   @Post('comision/prioridad')
   @Roles(RolUsuario.COMISION_OTORGAMIENTO)
   @ApiOperation({
-    summary: 'Configurar los 3 sectores prioritarios del período',
+    summary: 'Configurar los 3 sectores prioritarios y recalcular solicitudes',
   })
   @ApiBody({ type: ConfigurarPrioridadDto })
-  @ApiResponse({ status: 200, description: 'Configuración guardada' })
+  @ApiResponse({
+    status: 200,
+    description: 'Configuración guardada y solicitudes recalculadas',
+    schema: {
+      example: {
+        configuracion: {
+          id: '...',
+          sectorPrioritario1: 'SALUD',
+          sectorPrioritario2: 'EDUCACION',
+          sectorPrioritario3: 'DEFENSA',
+          periodoId: '...',
+          comisionId: '...',
+        },
+        recalculo: {
+          solicitudesActualizadas: 42,
+          solicitudesSinCambio: 8,
+          totalEvaluadas: 50,
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 400, description: 'Sectores duplicados o inválidos' })
+  @ApiResponse({
+    status: 403,
+    description: 'Solo la comisión puede configurar',
+  })
   configurarPrioridad(@Request() req, @Body() dto: ConfigurarPrioridadDto) {
     return this.perfilesService.configurarPrioridadComision(req.user.id, dto);
-  }
-
-  @Get('comision/prioridad')
-  @Roles(RolUsuario.COMISION_OTORGAMIENTO)
-  @ApiOperation({ summary: 'Obtener la configuración de prioridades' })
-  @ApiQuery({ name: 'periodoId', required: false, format: 'uuid' })
-  obtenerPrioridad(@Request() req, @Query('periodoId') periodoId?: string) {
-    return this.perfilesService.obtenerPrioridadComision(
-      req.user.id,
-      periodoId,
-    );
   }
 
   @Get('comision/:usuarioId/estadisticas') //Solo para Admins
