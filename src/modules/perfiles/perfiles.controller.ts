@@ -136,6 +136,52 @@ export class PerfilesController {
     );
   }
 
+  @Get('comision/prioridad')
+  @Roles(RolUsuario.COMISION_OTORGAMIENTO)
+  @ApiOperation({
+    summary: 'Obtener los sectores prioritarios del período actual',
+  })
+  @ApiQuery({
+    name: 'periodoId',
+    required: false,
+    format: 'uuid',
+    description: 'Por defecto, el período activo',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Sectores prioritarios del período',
+    schema: {
+      example: {
+        periodo: { id: '...', nombre: 'Curso 2026 Q4', activo: true },
+        comisionId: '...',
+        configurado: true,
+        sectores: [
+          { orden: 1, sector: 'SALUD' },
+          { orden: 2, sector: 'EDUCACION' },
+          { orden: 3, sector: 'DEFENSA' },
+        ],
+        sectorPrioritario1: 'SALUD',
+        sectorPrioritario2: 'EDUCACION',
+        sectorPrioritario3: 'DEFENSA',
+        actualizadoEn: '2026-11-13T10:30:00.000Z',
+      },
+    },
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Solo la comisión puede consultar sus prioridades',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Perfil de comisión o período no encontrado',
+  })
+  getPrioridadComisionActual(
+    @Request() req,
+    @Query('periodoId') periodoId?: string,
+  ) {
+    return this.perfilesService.getPrioridadComision(req.user, periodoId);
+  }
+
   @Post('comision/prioridad')
   @Roles(RolUsuario.COMISION_OTORGAMIENTO)
   @ApiOperation({

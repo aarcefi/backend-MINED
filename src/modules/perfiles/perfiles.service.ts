@@ -14,7 +14,7 @@ import { CreatePerfilSolicitanteDto } from './perfil-solicitante/dto/create-perf
 import { CreatePerfilFuncionarioDto } from './perfil-funcionario/dto/create-perfil-funcionario.dto';
 import { CreatePerfilComisionDto } from './perfil-comision/dto/create-perfil-comision.dto';
 import { CreatePerfilDirectorDto } from './perfil-director/create-perfil-director.dto';
-import { EstadoSolicitud, RolUsuario } from '@prisma/client';
+import { EstadoSolicitud, RolUsuario, SectorPrioridad } from '@prisma/client';
 import { CirculoInfantilService } from '../circulo-infantil/circulo-infantil.service';
 import { UsuariosService } from '../usuario/usuarios.service';
 import { ConfigurarPrioridadDto } from './perfil-comision/dto/configurar-prioridad.dto';
@@ -324,6 +324,109 @@ export class PerfilesService {
       totalSolicitudesAprobadas: total,
       porSector,
       porcentajes,
+    };
+  }
+
+  async getPrioridadComision(
+    usuario: any,
+    periodoId?: string,
+  ): Promise<{
+    periodo: { id: string; nombre: string; activo: boolean };
+    comisionId: string;
+    configurado: boolean;
+    sectores: { orden: number; sector: SectorPrioridad }[];
+    sectorPrioritario1: SectorPrioridad | null;
+    sectorPrioritario2: SectorPrioridad | null;
+    sectorPrioritario3: SectorPrioridad | null;
+    actualizadoEn: Date | null;
+  }> {
+    // 1. Solo COMISION_OTORGAMIENTO
+    if (usuario?.rol !== RolUsuario.COMISION_OTORGAMIENTO) {
+      throw new ForbiddenException(
+        'Solo la comisión de otorgamiento puede consultar sus prioridades',
+      );
+    }
+
+    // 2. Perfil de comisión
+    const usuarioDb = await this.prisma.usuario.findUnique({
+      where: { id: usuario.id },
+      include: { perfilComision: true },
+    });
+    if (!usuarioDb?.perfilComision) {
+      throw new NotFoundException('Perfil de comisión no encontrado');
+    }
+
+    // 3. Resolver período (parámetro o el activo)
+    let periodo: { id: string; nombre: string; activo: boolean } | null = null;
+    if (periodoId) {
+      periodo = await this.prisma.periodoOtorgamiento.findUnique({
+        where: { id: periodoId },
+        select: { id: true, nombre: true, activo: true },
+      });
+      if (!periodo) {
+        throw new NotFoundException(
+          `Período con ID ${periodoId} no encontrado`,
+        );
+      }
+    } else {
+      periodo = await this.prisma.periodoOtorgamiento.findFirst({
+        where: { activo: true },
+        select: { id: true, nombre: true, activo: true },
+        orderBy: { fechaInicio: 'desc' },
+      });
+      if (!periodo) {
+        throw new BadRequestException(
+          'No hay período de otorgamiento activo para consultar',
+        );
+      }
+    }
+
+    // 4. Configuración
+    const config = await this.prisma.configuracionPrioridadComision.findUnique({
+      where: {
+        comisionId_periodoId: {
+          comisionId: usuarioDb.perfilComision.id,
+          periodoId: periodo.id,
+        },
+      },
+    });
+
+    // 5. Respuesta
+    const base = {
+      periodo,
+      comisionId: usuarioDb.perfilComision.id,
+    };
+
+    if (!config) {
+      return {
+        ...base,
+        configurado: false,
+        sectores: [],
+        sectorPrioritario1: null,
+        sectorPrioritario2: null,
+        sectorPrioritario3: null,
+        actualizadoEn: null,
+      };
+    }
+
+    const sectores: { orden: number; sector: SectorPrioridad }[] = [
+      { orden: 1, sector: config.sectorPrioritario1 },
+    ];
+    if (config.sectorPrioritario2) {
+      sectores.push({ orden: 2, sector: config.sectorPrioritario2 });
+    }
+    if (config.sectorPrioritario3) {
+      sectores.push({ orden: 3, sector: config.sectorPrioritario3 });
+    }
+
+    return {
+      ...base,
+      configurado: true,
+      sectores,
+      sectorPrioritario1: config.sectorPrioritario1,
+      sectorPrioritario2: config.sectorPrioritario2,
+      sectorPrioritario3: config.sectorPrioritario3,
+      actualizadoEn: config.updatedAt,
     };
   }
 
