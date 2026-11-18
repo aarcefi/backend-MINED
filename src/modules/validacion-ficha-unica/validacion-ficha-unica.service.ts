@@ -1,14 +1,74 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
+
+function normalizar(valor: string | null | undefined): string {
+  return (valor ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
 
 @Injectable()
 export class ValidacionIdentidadService {
+  private readonly logger = new Logger(ValidacionIdentidadService.name);
   constructor(private prisma: PrismaService) {}
+
+  async verificarIdentidadCompleta(datos: {
+    carnetIdentidad: string;
+    nombre: string;
+    apellidos: string;
+  }): Promise<void> {
+    const ciudadano = await this.prisma.ciudadano.findUnique({
+      where: { carnetIdentidad: datos.carnetIdentidad },
+    });
+
+    if (!ciudadano) {
+      throw new BadRequestException(
+        'El carnet de identidad no está registrado en la ficha única',
+      );
+    }
+
+    if (!ciudadano.nombre || !ciudadano.apellidos) {
+      throw new BadRequestException(
+        'El carnet de identidad existe en la ficha única pero sus datos personales están incompletos. Contacte al registro civil.',
+      );
+    }
+
+    const nombreDb = normalizar(ciudadano.nombre);
+    const apellidosDb = normalizar(ciudadano.apellidos);
+    const nombreInput = normalizar(datos.nombre);
+    const apellidosInput = normalizar(datos.apellidos);
+
+    if (nombreDb !== nombreInput) {
+      this.logger.warn(
+        `Nombre no coincide para CI ${datos.carnetIdentidad}: ` +
+          `ficha="${ciudadano.nombre}" vs input="${datos.nombre}"`,
+      );
+      throw new BadRequestException(
+        'El nombre no coincide con el registrado en la ficha única',
+      );
+    }
+
+    if (apellidosDb !== apellidosInput) {
+      this.logger.warn(
+        `Apellidos no coinciden para CI ${datos.carnetIdentidad}: ` +
+          `ficha="${ciudadano.apellidos}" vs input="${datos.apellidos}"`,
+      );
+      throw new BadRequestException(
+        'Los apellidos no coinciden con los registrados en la ficha única',
+      );
+    }
+  }
 
   async verificarCarnetIdentidad(carnetIdentidad: string): Promise<boolean> {
     const ciudadano = await this.prisma.ciudadano.findUnique({

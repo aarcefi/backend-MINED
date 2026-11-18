@@ -1,906 +1,927 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/unbound-method */
-/* eslint-disable @typescript-eslint/require-await */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unused-vars */
-import { Test, TestingModule } from '@nestjs/testing';
+/* eslint-disable @typescript-eslint/unbound-method */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-floating-promises */
+import { Test } from '@nestjs/testing';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { SolicitudService } from './solicitud.service';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { NinosService } from '../nino/nino.service';
-import { PeriodoService } from '../periodo/periodo.service';
 import { TrazabilidadService } from '../trazabilidad/trazabilidad.service';
+import { PeriodoService } from '../periodo/periodo.service';
 import { ValidacionIdentidadService } from '../validacion-ficha-unica/validacion-ficha-unica.service';
 import { PriorityCalculator } from '../../common/prioridades/prioridad-calc.service.';
-import { DateUtilsService } from '../../common/utils/date-utils.service';
 import { EventDispatcher } from '../../common/events/event-dispatcher.service';
-import { CreateSolicitudDto, UpdateSolicitudDto } from './dto';
+import { DateUtilsService } from '../../common/utils/date-utils.service';
 import {
-  EstadoSolicitud,
-  RolUsuario,
-  SectorPrioridad,
-  TipoSolicitud,
-} from '../../common/enums';
-import {
-  NotFoundException,
-  ConflictException,
-  ForbiddenException,
-  BadRequestException,
-} from '@nestjs/common';
+  createPrismaMock,
+  PrismaMock,
+  setupTransaction,
+} from '../../../test/prisma-mock';
+import { EstadoSolicitud, RolUsuario } from '@prisma/client';
 
 describe('SolicitudService', () => {
-  let service: SolicitudService;
-  let prisma: PrismaService;
-  let ninosService: NinosService;
-  let periodoService: PeriodoService;
-  let trazabilidadService: TrazabilidadService;
-  let validacionService: ValidacionIdentidadService;
-  let priorityCalculator: PriorityCalculator;
-  let eventDispatcher: EventDispatcher;
-
-  const mockSolicitante = {
-    id: 'solicitante-id',
-    usuarioId: 'user-id',
-    direccion: 'Calle 123',
-    centroTrabajo: 'Oficina',
-    tipoPersona: 'MADRE',
-    cantHijos: 2,
-    usuario: {
-      id: 'user-id',
-      email: 'solicitante@example.com',
-      nombre: 'María',
-      apellidos: 'González',
-      carnetIdentidad: '85010112345',
-      telefono: '+5351234567',
-      municipio: 'La Habana',
-      provincia: 'La Habana',
-    },
-  };
-
-  const mockNino = {
-    id: 'nino-id',
-    nombre: 'Juan',
-    apellidos: 'Pérez',
-    fechaNacimiento: new Date('2021-05-10'),
-    sexo: 'M',
-    tarjetaMenor: 'TM001',
-    solicitanteId: 'solicitante-id',
-    casoEspecial: false,
-    tipoNecesidad: null,
-  };
-
-  const mockSolicitud = {
-    id: 'solicitud-id',
-    ninoId: 'nino-id',
-    solicitanteId: 'solicitante-id',
-    fechaSolicitud: new Date(),
-    sector: SectorPrioridad.SALUD,
-    tipoSolicitud: TipoSolicitud.TRABAJADOR,
-    estado: EstadoSolicitud.EN_REVISION,
-    periodoId: 'periodo-id',
-    observaciones: 'Observaciones',
-    prioridad: 50,
-    anioSolicitado: 'ANIO_3',
-    nino: mockNino,
-    periodo: {
-      id: 'periodo-id',
-      nombre: 'Periodo',
-      fechaInicio: new Date(),
-      fechaCierre: new Date(),
-    },
-    solicitante: mockSolicitante,
-    documentos: [],
-    matricula: null,
-  };
-
-  const mockPrisma = {
-    perfilSolicitante: { findUnique: jest.fn() },
-    nino: { findFirst: jest.fn() },
-    solicitud: {
-      findFirst: jest.fn(),
-      create: jest.fn(),
-      findMany: jest.fn(),
-      findUnique: jest.fn(),
-      update: jest.fn(),
-      delete: jest.fn(),
-      count: jest.fn(),
-    },
-    documentoSolicitud: { count: jest.fn() },
-    usuario: { findMany: jest.fn().mockResolvedValue([]) },
-    notificacion: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
-    decisionSolicitud: { count: jest.fn() },
-    matricula: { count: jest.fn() },
-    $transaction: jest.fn().mockImplementation(async (cb) => cb(mockPrisma)),
-  };
-
-  const mockNinosService = {
-    create: jest.fn().mockResolvedValue(mockNino),
-    update: jest.fn().mockResolvedValue(mockNino),
-    findOne: jest.fn().mockResolvedValue(mockNino),
-  };
-
-  const mockPeriodoService = {
-    obtenerPeriodoActivo: jest.fn().mockResolvedValue({
-      id: 'periodo-id',
-      fechaInicio: new Date('2026-01-01'),
-      fechaCierre: new Date('2026-06-30'),
-    }),
-  };
-
-  const mockTrazabilidadService = {
-    crearTrazabilidadAutomatica: jest.fn().mockResolvedValue({}),
-  };
-
-  const mockValidacionService = {
-    verificarCarnetIdentidad: jest.fn().mockResolvedValue(true),
-    obtenerNombre: jest
-      .fn()
-      .mockResolvedValue({ nombre: 'Juan', apellidos: 'Pérez' }),
-  };
-
-  const mockPriorityCalculator = {
-    calculatePriority: jest.fn().mockReturnValue(50),
-    getPriorityBreakdown: jest.fn(),
-  };
-
-  const mockDateUtils = {
-    calcularAnioVida: jest.fn().mockReturnValue('ANIO_3'),
-  };
-
-  const mockEventDispatcher = {
-    dispatch: jest.fn().mockResolvedValue(undefined),
-  };
-
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        SolicitudService,
-        { provide: PrismaService, useValue: mockPrisma },
-        { provide: NinosService, useValue: mockNinosService },
-        { provide: PeriodoService, useValue: mockPeriodoService },
-        { provide: TrazabilidadService, useValue: mockTrazabilidadService },
-        {
-          provide: ValidacionIdentidadService,
-          useValue: mockValidacionService,
-        },
-        { provide: PriorityCalculator, useValue: mockPriorityCalculator },
-        { provide: DateUtilsService, useValue: mockDateUtils },
-        { provide: EventDispatcher, useValue: mockEventDispatcher },
-      ],
-    }).compile();
-
-    service = module.get<SolicitudService>(SolicitudService);
-    prisma = module.get<PrismaService>(PrismaService);
-    ninosService = module.get<NinosService>(NinosService);
-    periodoService = module.get<PeriodoService>(PeriodoService);
-    trazabilidadService = module.get<TrazabilidadService>(TrazabilidadService);
-    validacionService = module.get<ValidacionIdentidadService>(
-      ValidacionIdentidadService,
-    );
-    priorityCalculator = module.get<PriorityCalculator>(PriorityCalculator);
-    eventDispatcher = module.get<EventDispatcher>(EventDispatcher);
-  });
-
   afterEach(() => {
     jest.clearAllMocks();
   });
+  let service: SolicitudService;
+  let prisma: PrismaMock;
+  let ninosService: any;
+  let trazabilidad: any;
+  let periodoService: any;
+  let validacion: any;
+  let priorityCalculator: any;
+  let dispatcher: any;
+  let dateUtils: any;
 
-  describe('create', () => {
-    const createDto: CreateSolicitudDto = {
-      solicitanteId: 'solicitante-id',
-      sector: SectorPrioridad.SALUD,
-      tipoSolicitud: TipoSolicitud.TRABAJADOR,
-      estado: EstadoSolicitud.EN_REVISION,
-      observaciones: 'Observaciones',
-      nino: {
-        nombre: 'Juan',
-        apellidos: 'Pérez',
-        fechaNacimiento: '2021-05-10',
-        sexo: 'M',
-        tarjetaMenor: 'TM001',
-        casoEspecial: false,
-        tipoNecesidad: null,
+  // ── fixtures ───────────────────────────────────────────────
+  const makeSolicitud = (over: any = {}) => ({
+    id: 's1',
+    solicitanteId: 'sol1',
+    circuloId: 'c1',
+    fechaSolicitud: new Date('2026-09-01'),
+    anioSolicitado: 'ANIO_2',
+    sector: 'SALUD',
+    tipoSolicitud: 'TRABAJADOR',
+    estado: 'EN_REVISION',
+    prioridad: 100,
+    observaciones: null,
+    nino: {
+      id: 'n1',
+      nombre: 'N',
+      apellidos: 'A',
+      tarjetaMenor: 'TM1',
+      fechaNacimiento: new Date('2024-01-01'),
+      sexo: 'M',
+      casoEspecial: false,
+      tipoNecesidad: null,
+    },
+    periodo: {
+      id: 'per1',
+      nombre: 'Curso',
+      fechaInicio: new Date('2026-09-01'),
+      fechaCierre: new Date('2027-07-01'),
+    },
+    solicitante: {
+      id: 'sol1',
+      direccion: 'Calle 1',
+      tipoPersona: 'MADRE',
+      cantHijos: 1,
+      centroTrabajo: 'H',
+      usuario: {
+        id: 'u1',
+        email: 'a@b.c',
+        nombre: 'N',
+        apellidos: 'A',
+        carnetIdentidad: '123',
+        telefono: '5',
+        municipioRel: { nombre: 'Playa' },
+        provinciaRel: { nombre: 'La Habana' },
+        municipioId: 'm1',
       },
+    },
+    circulo: {
+      id: 'c1',
+      nombre: 'X',
+      direccion: 'Calle 2',
+      tipo: 'NORMAL',
+      tieneSextoAnio: false,
+      municipioRel: { nombre: 'Playa' },
+      provinciaRel: { nombre: 'La Habana' },
+      municipioId: 'm1',
+    },
+    decisiones: [],
+    documentos: [],
+    matricula: null,
+    ...over,
+  });
+
+  beforeEach(async () => {
+    prisma = createPrismaMock();
+    setupTransaction(prisma);
+    ninosService = {
+      create: jest.fn(),
+      update: jest.fn(),
+      findOne: jest.fn(),
+    };
+    trazabilidad = { crearTrazabilidadAutomatica: jest.fn() };
+    periodoService = {
+      obtenerPeriodoActivo: jest.fn().mockResolvedValue({ id: 'per1' }),
+    };
+    validacion = { obtenerNombre: jest.fn() };
+    priorityCalculator = { calculatePriority: jest.fn().mockReturnValue(50) };
+    dispatcher = { dispatch: jest.fn() };
+    dateUtils = { calcularAnioVida: jest.fn().mockReturnValue('ANIO_2') };
+
+    const module = await Test.createTestingModule({
+      providers: [
+        SolicitudService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: NinosService, useValue: ninosService },
+        { provide: TrazabilidadService, useValue: trazabilidad },
+        { provide: PeriodoService, useValue: periodoService },
+        { provide: ValidacionIdentidadService, useValue: validacion },
+        { provide: PriorityCalculator, useValue: priorityCalculator },
+        { provide: EventDispatcher, useValue: dispatcher },
+        { provide: DateUtilsService, useValue: dateUtils },
+      ],
+    }).compile();
+
+    service = module.get(SolicitudService);
+  });
+
+  // ── create ────────────────────────────────────────────────
+  describe('create', () => {
+    const dto = {
+      solicitanteId: 'sol1',
+      sector: 'SALUD',
+      tipoSolicitud: 'TRABAJADOR',
+      estado: 'EN_REVISION',
+      nino: { tarjetaMenor: 'TM1', nombre: 'N', apellidos: 'A' },
     };
 
-    it('should throw NotFoundException if solicitante does not exist', async () => {
-      mockPrisma.perfilSolicitante.findUnique.mockResolvedValueOnce(null);
+    beforeEach(() => {
+      prisma.perfilSolicitante.findUnique.mockResolvedValue({
+        id: 'sol1',
+        cantHijos: 1,
+        usuario: { municipioId: 'm1', municipioRel: { nombre: 'Playa' } },
+      } as any);
+      prisma.solicitud.findFirst.mockResolvedValue(null);
+      validacion.obtenerNombre.mockResolvedValue({
+        nombre: 'N',
+        apellidos: 'A',
+      });
+      ninosService.create.mockResolvedValue({
+        id: 'n1',
+        fechaNacimiento: new Date('2024-01-01'),
+      });
+      prisma.solicitud.create.mockResolvedValue(makeSolicitud());
+      prisma.usuario.findFirst.mockResolvedValue(null);
+    });
+
+    it('lanza NotFound si el solicitante no existe', async () => {
+      prisma.perfilSolicitante.findUnique.mockResolvedValue(null);
       await expect(
-        service.create(createDto, { id: 'user-id' }),
+        service.create(dto as any, { id: 'u1' } as any),
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('should throw ConflictException if fecha actual fuera del periodo activo', async () => {
-      mockPrisma.perfilSolicitante.findUnique.mockResolvedValueOnce(
-        mockSolicitante,
-      );
-      const periodoInvalido = {
-        id: 'periodo-id',
-        fechaInicio: new Date('2026-01-01'),
-        fechaCierre: new Date('2026-03-31'),
-      };
-      mockPeriodoService.obtenerPeriodoActivo.mockResolvedValueOnce(
-        periodoInvalido,
-      );
-      // Simular fecha actual fuera del rango
-      const mockDate = new Date('2026-06-01');
-      jest.spyOn(global, 'Date').mockImplementation(() => mockDate as any);
+    it('lanza NotFound si el círculo no existe', async () => {
+      prisma.circuloInfantil.findUnique.mockResolvedValue(null);
       await expect(
-        service.create(createDto, { id: 'user-id' }),
-      ).rejects.toThrow(ConflictException);
-      jest.spyOn(global, 'Date').mockRestore();
+        service.create({ ...dto, circuloId: 'cx' } as any, { id: 'u1' } as any),
+      ).rejects.toThrow(NotFoundException);
     });
 
-    it('should find existing nino and use it', async () => {
-      mockPrisma.perfilSolicitante.findUnique.mockResolvedValueOnce(
-        mockSolicitante,
-      );
-      mockPeriodoService.obtenerPeriodoActivo.mockResolvedValueOnce({
-        id: 'periodo-id',
-        fechaInicio: new Date('2026-01-01'),
-        fechaCierre: new Date('2026-12-31'),
-      });
-      mockPrisma.nino.findFirst.mockResolvedValueOnce(mockNino);
-      mockPrisma.solicitud.findFirst.mockResolvedValueOnce(null);
-      mockPrisma.solicitud.create.mockResolvedValueOnce(mockSolicitud);
-
-      const result = await service.create(createDto, { id: 'user-id' });
-      expect(result).toHaveProperty('id', 'solicitud-id');
-      expect(mockValidacionService.obtenerNombre).not.toHaveBeenCalled();
-    });
-
-    it('should create a new nino if not found and verify carnet', async () => {
-      mockPrisma.perfilSolicitante.findUnique.mockResolvedValueOnce(
-        mockSolicitante,
-      );
-      mockPeriodoService.obtenerPeriodoActivo.mockResolvedValueOnce({
-        id: 'periodo-id',
-        fechaInicio: new Date('2026-01-01'),
-        fechaCierre: new Date('2026-12-31'),
-      });
-      mockPrisma.nino.findFirst.mockResolvedValueOnce(null);
-      mockPrisma.solicitud.findFirst.mockResolvedValueOnce(null);
-      mockPrisma.solicitud.create.mockResolvedValueOnce(mockSolicitud);
-
-      const result = await service.create(createDto, { id: 'user-id' });
-      expect(mockValidacionService.obtenerNombre).toHaveBeenCalledWith('TM001');
-      expect(mockNinosService.create).toHaveBeenCalledWith(
-        expect.objectContaining({ nombre: 'Juan', apellidos: 'Pérez' }),
-      );
-      expect(result).toHaveProperty('id', 'solicitud-id');
-    });
-
-    it('should throw ConflictException if nino belongs to another solicitante', async () => {
-      mockPrisma.perfilSolicitante.findUnique.mockResolvedValueOnce(
-        mockSolicitante,
-      );
-      mockPeriodoService.obtenerPeriodoActivo.mockResolvedValueOnce({
-        id: 'periodo-id',
-        fechaInicio: new Date('2026-01-01'),
-        fechaCierre: new Date('2026-12-31'),
-      });
-      mockPrisma.nino.findFirst.mockResolvedValueOnce({
-        ...mockNino,
-        solicitanteId: 'other',
-      });
+    it('lanza Conflict si ya existe solicitud del niño en el período', async () => {
+      prisma.solicitud.findFirst.mockResolvedValue({ id: 'old' } as any);
       await expect(
-        service.create(createDto, { id: 'user-id' }),
+        service.create(dto as any, { id: 'u1' } as any),
       ).rejects.toThrow(ConflictException);
     });
 
-    it('should throw ConflictException if active solicitud exists for nino in periodo', async () => {
-      mockPrisma.perfilSolicitante.findUnique.mockResolvedValueOnce(
-        mockSolicitante,
-      );
-      mockPeriodoService.obtenerPeriodoActivo.mockResolvedValueOnce({
-        id: 'periodo-id',
-        fechaInicio: new Date('2026-01-01'),
-        fechaCierre: new Date('2026-12-31'),
-      });
-      mockPrisma.nino.findFirst.mockResolvedValueOnce(mockNino);
-      mockPrisma.solicitud.findFirst.mockResolvedValueOnce({ id: 'existing' });
+    it('lanza BadRequest si el niño no tiene edad válida', async () => {
+      dateUtils.calcularAnioVida.mockReturnValue(null);
       await expect(
-        service.create(createDto, { id: 'user-id' }),
-      ).rejects.toThrow(ConflictException);
-    });
-
-    it('should calculate priority and create solicitud', async () => {
-      mockPrisma.perfilSolicitante.findUnique.mockResolvedValueOnce(
-        mockSolicitante,
-      );
-      mockPeriodoService.obtenerPeriodoActivo.mockResolvedValueOnce({
-        id: 'periodo-id',
-        fechaInicio: new Date('2026-01-01'),
-        fechaCierre: new Date('2026-12-31'),
-      });
-      mockPrisma.nino.findFirst.mockResolvedValueOnce(mockNino);
-      mockPrisma.solicitud.findFirst.mockResolvedValueOnce(null);
-      mockPrisma.solicitud.create.mockResolvedValueOnce(mockSolicitud);
-      mockDateUtils.calcularAnioVida.mockReturnValueOnce('ANIO_3');
-
-      const result = await service.create(createDto, { id: 'user-id' });
-      expect(priorityCalculator.calculatePriority).toHaveBeenCalled();
-      expect(
-        mockTrazabilidadService.crearTrazabilidadAutomatica,
-      ).toHaveBeenCalled();
-      expect(result).toHaveProperty('id', 'solicitud-id');
-    });
-
-    it('should throw BadRequestException if child age not between 1 and 6', async () => {
-      mockPrisma.perfilSolicitante.findUnique.mockResolvedValueOnce(
-        mockSolicitante,
-      );
-      mockPeriodoService.obtenerPeriodoActivo.mockResolvedValueOnce({
-        id: 'periodo-id',
-        fechaInicio: new Date('2026-01-01'),
-        fechaCierre: new Date('2026-12-31'),
-      });
-      mockPrisma.nino.findFirst.mockResolvedValueOnce(mockNino);
-      mockDateUtils.calcularAnioVida.mockReturnValueOnce(null);
-      await expect(
-        service.create(createDto, { id: 'user-id' }),
+        service.create(dto as any, { id: 'u1' } as any),
       ).rejects.toThrow(BadRequestException);
     });
+
+    it('crea solicitud en happy path', async () => {
+      const r = await service.create(dto as any, { id: 'u1' } as any);
+      expect(r.id).toBe('s1');
+      expect(prisma.solicitud.create).toHaveBeenCalled();
+      expect(priorityCalculator.calculatePriority).toHaveBeenCalled();
+    });
+
+    it('usa municipio del círculo si se envía circuloId', async () => {
+      prisma.circuloInfantil.findUnique.mockResolvedValue({
+        id: 'c1',
+        municipioId: 'mc',
+        municipioRel: { nombre: 'Centro Habana' },
+      } as any);
+      prisma.usuario.findFirst.mockResolvedValue({
+        perfilComision: { id: 'pc1' },
+      } as any);
+      prisma.configuracionPrioridadComision.findUnique.mockResolvedValue({
+        sectorPrioritario1: 'SALUD',
+        sectorPrioritario2: null,
+        sectorPrioritario3: null,
+      } as any);
+
+      await service.create(
+        { ...dto, circuloId: 'c1' } as any,
+        { id: 'u1' } as any,
+      );
+
+      const ctx = priorityCalculator.calculatePriority.mock.calls[0][0];
+      expect(ctx.configuracionPrioridad).toEqual({
+        sector1: 'SALUD',
+        sector2: null,
+        sector3: null,
+      });
+    });
   });
 
+  // ── findAll ───────────────────────────────────────────────
   describe('findAll', () => {
-    it('should return list of solicitudes with filters', async () => {
-      mockPrisma.solicitud.findMany.mockResolvedValueOnce([mockSolicitud]);
-      const result = await service.findAll(
-        { estado: EstadoSolicitud.EN_REVISION },
-        { rol: RolUsuario.ADMINISTRADOR },
-      );
-      expect(result).toHaveLength(1);
-      expect(result[0]).toHaveProperty('id', 'solicitud-id');
-    });
-
-    it('should apply municipio filter in both directions', async () => {
-      mockPrisma.solicitud.findMany.mockResolvedValueOnce([
-        { ...mockSolicitud, solicitante: { usuario: { municipio: 'Plaza' } } },
-        {
-          ...mockSolicitud,
-          solicitante: { usuario: { municipio: 'Plaza de la Revolución' } },
-        },
-        { ...mockSolicitud, solicitante: { usuario: { municipio: 'Cerro' } } },
-      ]);
-      const result = await service.findAll(
-        { municipio: 'Plaza de la Revolución' },
-        { rol: RolUsuario.COMISION_OTORGAMIENTO },
-      );
-      expect(result).toHaveLength(2);
-    });
-
-    it('should filter by director de circulo municipio', async () => {
-      mockPrisma.solicitud.findMany.mockResolvedValueOnce([
-        {
-          ...mockSolicitud,
-          solicitante: { usuario: { municipio: 'Centro Habana' } },
-        },
-        { ...mockSolicitud, solicitante: { usuario: { municipio: 'Cerro' } } },
-      ]);
-      const result = await service.findAll(
-        {},
-        {
-          rol: RolUsuario.DIRECTOR_CIRCULO,
-          perfil: { municipio: 'Centro Habana' },
-        },
-      );
-      expect(result).toHaveLength(1);
-    });
-
-    it('should apply date filters', async () => {
-      mockPrisma.solicitud.findMany.mockResolvedValueOnce([mockSolicitud]);
+    it('ADMIN aplica filtro.municipio', async () => {
+      prisma.solicitud.findMany.mockResolvedValue([makeSolicitud()] as any);
       await service.findAll(
-        {
-          fechaDesde: new Date('2026-01-01'),
-          fechaHasta: new Date('2026-12-31'),
-        },
+        { municipio: 'Playa' },
         { rol: RolUsuario.ADMINISTRADOR },
       );
-      expect(mockPrisma.solicitud.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            fechaSolicitud: {
-              gte: expect.any(Date),
-              lte: expect.any(Date),
+      expect(prisma.solicitud.findMany).toHaveBeenCalled();
+    });
+
+    it('FUNCIONARIO usa su municipio (filtra si no coincide)', async () => {
+      prisma.solicitud.findMany.mockResolvedValue([
+        makeSolicitud(),
+        makeSolicitud({
+          id: 's2',
+          circulo: null,
+          solicitante: {
+            ...makeSolicitud().solicitante,
+            usuario: {
+              ...makeSolicitud().solicitante.usuario,
+              municipioRel: { nombre: 'Cerro' },
             },
-          }),
+          },
         }),
-      );
-    });
-  });
+      ] as any);
 
-  describe('findOne', () => {
-    it('should return solicitud if found and user has permission', async () => {
-      mockPrisma.solicitud.findUnique.mockResolvedValueOnce(mockSolicitud);
-      const result = await service.findOne('solicitud-id', {
-        rol: RolUsuario.ADMINISTRADOR,
-      });
-      expect(result).toHaveProperty('id', 'solicitud-id');
-    });
-
-    it('should throw NotFoundException if solicitud not found', async () => {
-      mockPrisma.solicitud.findUnique.mockResolvedValueOnce(null);
-      await expect(
-        service.findOne('invalid', { rol: RolUsuario.ADMINISTRADOR }),
-      ).rejects.toThrow(NotFoundException);
-    });
-
-    it('should throw ForbiddenException for solicitante if not owner', async () => {
-      mockPrisma.solicitud.findUnique.mockResolvedValueOnce(mockSolicitud);
-      await expect(
-        service.findOne('solicitud-id', {
-          rol: RolUsuario.SOLICITANTE,
-          perfilId: 'other',
-        }),
-      ).rejects.toThrow(ForbiddenException);
-    });
-
-    it('should throw ForbiddenException for director if not same municipio', async () => {
-      const solicitudWithMunicipio = {
-        ...mockSolicitud,
-        solicitante: {
-          ...mockSolicitante,
-          usuario: { ...mockSolicitante.usuario, municipio: 'Otro' },
-        },
-      };
-      mockPrisma.solicitud.findUnique.mockResolvedValueOnce(
-        solicitudWithMunicipio,
-      );
-      await expect(
-        service.findOne('solicitud-id', {
-          rol: RolUsuario.DIRECTOR_CIRCULO,
-          perfil: { municipio: 'La Habana' },
-        }),
-      ).rejects.toThrow(ForbiddenException);
-    });
-
-    it('should throw ForbiddenException for unknown role', async () => {
-      mockPrisma.solicitud.findUnique.mockResolvedValueOnce(mockSolicitud);
-      await expect(
-        service.findOne('solicitud-id', { rol: 'UNKNOWN' as any }),
-      ).rejects.toThrow(ForbiddenException);
-    });
-  });
-
-  describe('findBySolicitanteId', () => {
-    it('should return list of solicitudes for solicitante', async () => {
-      mockPrisma.solicitud.findMany.mockResolvedValueOnce([mockSolicitud]);
-      const result = await service.findBySolicitanteId('solicitante-id');
-      expect(result).toHaveLength(1);
-      expect(mockPrisma.solicitud.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { solicitanteId: 'solicitante-id' },
-        }),
-      );
-    });
-  });
-
-  describe('findByNinoId', () => {
-    it('should return list of solicitudes for nino', async () => {
-      mockNinosService.findOne.mockResolvedValueOnce(mockNino);
-      mockPrisma.solicitud.findMany.mockResolvedValueOnce([mockSolicitud]);
-      const result = await service.findByNinoId('nino-id', {
-        rol: RolUsuario.ADMINISTRADOR,
-      });
-      expect(result).toHaveLength(1);
-    });
-
-    it('should throw ForbiddenException if solicitante tries to access other nino', async () => {
-      mockNinosService.findOne.mockResolvedValueOnce({
-        ...mockNino,
-        solicitanteId: 'other',
-      });
-      await expect(
-        service.findByNinoId('nino-id', {
-          rol: RolUsuario.SOLICITANTE,
-          perfilId: 'solicitante-id',
-        }),
-      ).rejects.toThrow(ForbiddenException);
-    });
-  });
-
-  describe('findPendientesRevision', () => {
-    it('should return solicitudes with estado EN_REVISION and documentos validados', async () => {
-      mockPrisma.solicitud.findMany.mockResolvedValueOnce([mockSolicitud]);
-      const result = await service.findPendientesRevision();
-      expect(result).toHaveLength(1);
-      expect(mockPrisma.solicitud.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            estado: 'EN_REVISION',
-            documentos: { every: { validado: true } },
-          }),
-        }),
-      );
-    });
-
-    it('should filter by municipio', async () => {
-      mockPrisma.solicitud.findMany.mockResolvedValueOnce([
-        { ...mockSolicitud, solicitante: { usuario: { municipio: 'Plaza' } } },
-        {
-          ...mockSolicitud,
-          solicitante: { usuario: { municipio: 'Marianao' } },
-        },
-      ]);
-      const result = await service.findPendientesRevision(
-        'Plaza de la Revolución',
-      );
-      expect(result).toHaveLength(1);
-    });
-  });
-
-  describe('update', () => {
-    const updateDto: UpdateSolicitudDto = {
-      sector: SectorPrioridad.EDUCACION,
-      tipoSolicitud: TipoSolicitud.ESTUDIANTE,
-      observaciones: 'Actualizado',
-      estado: EstadoSolicitud.APROBADA_COMISION,
-    };
-
-    it('should throw NotFoundException if solicitud not found', async () => {
-      mockPrisma.solicitud.findUnique.mockResolvedValueOnce(null);
-      await expect(
-        service.update('invalid', updateDto, { rol: RolUsuario.ADMINISTRADOR }),
-      ).rejects.toThrow(NotFoundException);
-    });
-
-    it('should allow solicitante to update only sector, tipo, observaciones', async () => {
-      mockPrisma.solicitud.findUnique.mockResolvedValueOnce(mockSolicitud);
-      mockPrisma.solicitud.update.mockResolvedValueOnce({
-        ...mockSolicitud,
-        ...updateDto,
-      });
-      const result = await service.update('solicitud-id', updateDto, {
-        rol: RolUsuario.SOLICITANTE,
-        perfilId: 'solicitante-id',
-      });
-      expect(result).toHaveProperty('estado', mockSolicitud.estado); // estado no debe cambiar
-    });
-
-    it('should allow funcionario to update estado and recalculate priority', async () => {
-      mockPrisma.solicitud.findUnique.mockResolvedValueOnce({
-        ...mockSolicitud,
-        nino: mockNino,
-        solicitante: mockSolicitante,
-      });
-      mockPrisma.solicitud.update.mockResolvedValueOnce({
-        ...mockSolicitud,
-        ...updateDto,
-      });
-      const result = await service.update('solicitud-id', updateDto, {
+      const r = await service.findAll({}, {
         rol: RolUsuario.FUNCIONARIO_MUNICIPAL,
-        municipio: 'La Habana',
-      });
-      expect(priorityCalculator.calculatePriority).toHaveBeenCalled();
-      expect(result).toHaveProperty(
-        'estado',
-        EstadoSolicitud.APROBADA_COMISION,
-      );
+        municipio: 'Playa',
+      } as any);
+      expect(r).toHaveLength(1);
+      expect(r[0].id).toBe('s1');
     });
 
-    it('should not allow solicitante to change estado', async () => {
-      mockPrisma.solicitud.findUnique.mockResolvedValueOnce(mockSolicitud);
-      mockPrisma.solicitud.update.mockResolvedValueOnce({
-        ...mockSolicitud,
-        estado: EstadoSolicitud.RECHAZADA_COMISION,
-      });
-      const result = await service.update(
-        'solicitud-id',
-        { estado: EstadoSolicitud.RECHAZADA_COMISION },
-        {
-          rol: RolUsuario.SOLICITANTE,
-          perfilId: 'solicitante-id',
-        },
-      );
-      expect(result.estado).toBe(mockSolicitud.estado); // no cambió
-    });
-
-    it('should return without updating if no changes', async () => {
-      mockPrisma.solicitud.findUnique.mockResolvedValueOnce(mockSolicitud);
-      const result = await service.update(
-        'solicitud-id',
+    it('DIRECTOR_CIRCULO usa municipio del perfil', async () => {
+      prisma.solicitud.findMany.mockResolvedValue([] as any);
+      await service.findAll(
         {},
-        { rol: RolUsuario.ADMINISTRADOR },
-      );
-      expect(result).toHaveProperty('id', 'solicitud-id');
-      expect(mockPrisma.solicitud.update).not.toHaveBeenCalled();
-    });
-
-    it('should dispatch event if estado changes by non-solicitante', async () => {
-      const updatedSolicitud = {
-        ...mockSolicitud,
-        estado: EstadoSolicitud.APROBADA_COMISION,
-      };
-      mockPrisma.solicitud.findUnique.mockResolvedValueOnce({
-        ...mockSolicitud,
-        nino: mockNino,
-        solicitante: mockSolicitante,
-      });
-      mockPrisma.solicitud.update.mockResolvedValueOnce(updatedSolicitud);
-      await service.update(
-        'solicitud-id',
-        { estado: EstadoSolicitud.APROBADA_COMISION },
         {
-          rol: RolUsuario.FUNCIONARIO_MUNICIPAL,
-          municipio: 'La Habana',
+          rol: RolUsuario.DIRECTOR_CIRCULO,
+          perfil: { municipio: 'Playa' },
         },
       );
-      expect(eventDispatcher.dispatch).toHaveBeenCalled();
+      expect(prisma.solicitud.findMany).toHaveBeenCalled();
     });
   });
 
-  describe('updateNino', () => {
-    it('should update nino and recalculate priority', async () => {
-      const updateNinoDto = { casoEspecial: true };
-      mockPrisma.solicitud.findUnique.mockResolvedValueOnce({
-        ...mockSolicitud,
-        nino: mockNino,
-        solicitante: mockSolicitante,
-      });
-      mockNinosService.update.mockResolvedValueOnce({
-        ...mockNino,
-        casoEspecial: true,
-      });
-      mockPrisma.solicitud.update.mockResolvedValueOnce(mockSolicitud);
-      const result = await service.updateNino('solicitud-id', updateNinoDto, {
-        rol: RolUsuario.ADMINISTRADOR,
-      });
-      expect(mockNinosService.update).toHaveBeenCalledWith(
-        'nino-id',
-        updateNinoDto,
-      );
-      expect(priorityCalculator.calculatePriority).toHaveBeenCalled();
-      expect(result).toBeDefined();
-    });
-
-    it('should throw NotFoundException if solicitud not found', async () => {
-      mockPrisma.solicitud.findUnique.mockResolvedValueOnce(null);
+  // ── findOne / permisos ────────────────────────────────────
+  describe('findOne', () => {
+    it('lanza NotFound si no existe', async () => {
+      prisma.solicitud.findUnique.mockResolvedValue(null);
       await expect(
-        service.updateNino('invalid', {}, { rol: RolUsuario.ADMINISTRADOR }),
+        service.findOne('s1', { rol: RolUsuario.ADMINISTRADOR }),
       ).rejects.toThrow(NotFoundException);
     });
-  });
 
-  describe('cambiarEstado', () => {
-    it('should change estado and dispatch event', async () => {
-      mockPrisma.solicitud.findUnique.mockResolvedValueOnce({
-        ...mockSolicitud,
-        nino: mockNino,
-        solicitante: mockSolicitante,
-      });
-      mockPrisma.solicitud.update.mockResolvedValueOnce({
-        ...mockSolicitud,
-        estado: EstadoSolicitud.APROBADA_COMISION,
-      });
-      const result = await service.cambiarEstado(
-        'solicitud-id',
-        EstadoSolicitud.APROBADA_COMISION,
-        { id: 'user-id', rol: RolUsuario.FUNCIONARIO_MUNICIPAL },
-        'Comentario',
-      );
-      expect(
-        mockTrazabilidadService.crearTrazabilidadAutomatica,
-      ).toHaveBeenCalled();
-      expect(eventDispatcher.dispatch).toHaveBeenCalled();
-      expect(result).toHaveProperty(
-        'estado',
-        EstadoSolicitud.APROBADA_COMISION,
-      );
+    it('ADMIN puede ver cualquier solicitud', async () => {
+      prisma.solicitud.findUnique.mockResolvedValue(makeSolicitud());
+      await expect(
+        service.findOne('s1', { rol: RolUsuario.ADMINISTRADOR }),
+      ).resolves.toBeTruthy();
     });
 
-    it('should throw ForbiddenException if solicitante tries to change estado', async () => {
-      mockPrisma.solicitud.findUnique.mockResolvedValueOnce(mockSolicitud);
+    it('SOLICITANTE dueño accede, ajeno falla', async () => {
+      prisma.solicitud.findUnique.mockResolvedValue(makeSolicitud());
       await expect(
-        service.cambiarEstado(
-          'solicitud-id',
-          EstadoSolicitud.APROBADA_COMISION,
-          { id: 'user-id', rol: RolUsuario.SOLICITANTE },
-          'Comentario',
-        ),
+        service.findOne('s1', {
+          rol: RolUsuario.SOLICITANTE,
+          perfilId: 'sol1',
+        }),
+      ).resolves.toBeTruthy();
+
+      await expect(
+        service.findOne('s1', {
+          rol: RolUsuario.SOLICITANTE,
+          perfilId: 'otro',
+        }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('FUNCIONARIO de otro municipio falla', async () => {
+      prisma.solicitud.findUnique.mockResolvedValue(makeSolicitud());
+      await expect(
+        service.findOne('s1', {
+          rol: RolUsuario.FUNCIONARIO_MUNICIPAL,
+          municipio: 'Cerro',
+        }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('DIRECTOR con círculo distinto falla', async () => {
+      prisma.solicitud.findUnique.mockResolvedValue(makeSolicitud());
+      await expect(
+        service.findOne('s1', {
+          rol: RolUsuario.DIRECTOR_CIRCULO,
+          perfil: { circuloId: 'otro' },
+        }),
       ).rejects.toThrow(ForbiddenException);
     });
   });
 
-  describe('remove', () => {
-    it('should delete solicitud if no dependencies', async () => {
-      mockPrisma.solicitud.findUnique.mockResolvedValueOnce(mockSolicitud);
-      mockPrisma.documentoSolicitud.count.mockResolvedValueOnce(0);
-      mockPrisma.decisionSolicitud.count.mockResolvedValueOnce(0);
-      mockPrisma.matricula.count.mockResolvedValueOnce(0);
-      mockPrisma.solicitud.delete.mockResolvedValueOnce({});
-      const result = await service.remove('solicitud-id', {
-        rol: RolUsuario.ADMINISTRADOR,
-      });
-      expect(result.message).toContain('eliminada exitosamente');
-    });
-
-    it('should delete solicitud with documentos', async () => {
-      mockPrisma.solicitud.findUnique.mockResolvedValueOnce({
-        ...mockSolicitud,
-        documentos: [],
-      });
-      await service.remove('solicitud-id', { rol: RolUsuario.ADMINISTRADOR });
-      expect(mockPrisma.solicitud.delete).toHaveBeenCalledWith({
-        where: { id: 'solicitud-id' },
-      });
-    });
-
-    it('should throw ConflictException if tiene decisiones', async () => {
-      mockPrisma.solicitud.findUnique.mockResolvedValueOnce(mockSolicitud);
-      mockPrisma.documentoSolicitud.count.mockResolvedValueOnce(0);
-      mockPrisma.decisionSolicitud.count.mockResolvedValueOnce(1);
-      await expect(
-        service.remove('solicitud-id', { rol: RolUsuario.ADMINISTRADOR }),
-      ).rejects.toThrow(ConflictException);
-    });
-
-    it('should throw ConflictException if tiene matricula', async () => {
-      mockPrisma.solicitud.findUnique.mockResolvedValueOnce(mockSolicitud);
-      mockPrisma.documentoSolicitud.count.mockResolvedValueOnce(0);
-      mockPrisma.decisionSolicitud.count.mockResolvedValueOnce(0);
-      mockPrisma.matricula.count.mockResolvedValueOnce(1);
-      await expect(
-        service.remove('solicitud-id', { rol: RolUsuario.ADMINISTRADOR }),
-      ).rejects.toThrow(ConflictException);
-    });
+  // ── findByNinoId ──────────────────────────────────────────
+  it('findByNinoId bloquea solicitante ajeno', async () => {
+    ninosService.findOne.mockResolvedValue({ solicitanteId: 'sol1' });
+    await expect(
+      service.findByNinoId('n1', {
+        rol: RolUsuario.SOLICITANTE,
+        perfilId: 'otro',
+      }),
+    ).rejects.toThrow(ForbiddenException);
   });
 
-  describe('getEstadisticas', () => {
-    it('should return statistics', async () => {
-      mockPrisma.solicitud.findMany.mockResolvedValueOnce([mockSolicitud]);
-      const result = await service.getEstadisticas({ periodoId: 'periodo-id' });
-      expect(result).toHaveProperty('total');
-      expect(result).toHaveProperty('porEstado');
-      expect(result).toHaveProperty('porSector');
-      expect(result).toHaveProperty('porTipo');
+  // ── findPendientesRevision ────────────────────────────────
+  it('findPendientesRevision filtra por municipio', async () => {
+    prisma.solicitud.findMany.mockResolvedValue([
+      makeSolicitud(),
+      makeSolicitud({
+        id: 's2',
+        circulo: {
+          ...makeSolicitud().circulo,
+          municipioRel: { nombre: 'Cerro' },
+        },
+      }),
+    ] as any);
+    const r = await service.findPendientesRevision('Playa');
+    expect(r).toHaveLength(1);
+  });
+
+  // ── update ────────────────────────────────────────────────
+  describe('update', () => {
+    beforeEach(() => {
+      prisma.solicitud.findUnique.mockResolvedValue(makeSolicitud());
     });
 
-    it('should filter by municipio', async () => {
-      mockPrisma.solicitud.findMany.mockResolvedValueOnce([mockSolicitud]);
-      await service.getEstadisticas({ municipio: 'La Habana' });
-      expect(mockPrisma.solicitud.findMany).toHaveBeenCalledWith(
+    it('devuelve original si no hay cambios', async () => {
+      const r = await service.update(
+        's1',
+        {} as any,
+        {
+          id: 'u1',
+          rol: RolUsuario.ADMINISTRADOR,
+        } as any,
+      );
+      expect(r.id).toBe('s1');
+      expect(prisma.solicitud.update).not.toHaveBeenCalled();
+    });
+
+    it('actualiza sector y recalcula prioridad', async () => {
+      prisma.usuario.findFirst.mockResolvedValue(null);
+      prisma.solicitud.update.mockResolvedValue(
+        makeSolicitud({ sector: 'EDUCACION' }),
+      );
+
+      await service.update(
+        's1',
+        { sector: 'EDUCACION' } as any,
+        { id: 'u1', rol: RolUsuario.ADMINISTRADOR } as any,
+      );
+
+      expect(prisma.solicitud.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({
-            solicitante: {
-              usuario: {
-                municipio: { contains: 'La Habana', mode: 'insensitive' },
-              },
-            },
+          data: expect.objectContaining({
+            sector: 'EDUCACION',
+            prioridad: expect.any(Number),
           }),
         }),
       );
     });
+
+    it('lanza NotFound si el circuloId no existe', async () => {
+      prisma.circuloInfantil.findUnique.mockResolvedValue(null);
+      await expect(
+        service.update(
+          's1',
+          { circuloId: 'noexiste' } as any,
+          { id: 'u1', rol: RolUsuario.ADMINISTRADOR } as any,
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
   });
 
-  describe('Private methods coverage', () => {
-    it('should calculate priority correctly', () => {
-      const prioridad = service['calcularPrioridad'](
-        { sector: 'SALUD', tipoSolicitud: 'TRABAJADOR' },
-        { casoEspecial: true, tipoNecesidad: 'DISCAPACIDAD' },
-        { cantHijos: 2 },
+  // ── updateNino ────────────────────────────────────────────
+  it('updateNino recalcula prioridad si cambia casoEspecial', async () => {
+    prisma.solicitud.findUnique
+      .mockResolvedValueOnce(makeSolicitud())
+      .mockResolvedValueOnce(makeSolicitud());
+    ninosService.update.mockResolvedValue({
+      casoEspecial: true,
+      tipoNecesidad: 'X',
+    });
+    prisma.usuario.findFirst.mockResolvedValue(null);
+    prisma.solicitud.update.mockResolvedValue({} as any);
+
+    await service.updateNino(
+      's1',
+      { casoEspecial: true } as any,
+      { id: 'u1', rol: RolUsuario.ADMINISTRADOR } as any,
+    );
+    expect(priorityCalculator.calculatePriority).toHaveBeenCalled();
+  });
+
+  // ── cambiarEstado ─────────────────────────────────────────
+  describe('cambiarEstado', () => {
+    it('rechaza a SOLICITANTE', async () => {
+      prisma.solicitud.findUnique.mockResolvedValue(makeSolicitud());
+      await expect(
+        service.cambiarEstado('s1', EstadoSolicitud.APROBADA_COMISION, {
+          id: 'u1',
+          rol: RolUsuario.SOLICITANTE,
+          perfilId: 'sol1',
+        } as any),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('APROBADA_COMISION sin círculo → BadRequest', async () => {
+      prisma.solicitud.findUnique.mockResolvedValue(
+        makeSolicitud({ circulo: null, circuloId: null }),
       );
-      expect(prioridad).toBe(30 + 20 + 15 + 10 + 5); // 80
-    });
-
-    it('should verify permisos for ADMINISTRADOR', () => {
-      const solicitud = {
-        solicitante: { usuario: { municipio: 'La Habana' } },
-      };
-      expect(() =>
-        service['verificarPermisosSolicitud'](solicitud, {
-          rol: RolUsuario.ADMINISTRADOR,
-        }),
-      ).not.toThrow();
-    });
-
-    it('should verify permisos for FUNCIONARIO_MUNICIPAL', () => {
-      const solicitud = {
-        solicitante: { usuario: { municipio: 'La Habana' } },
-      };
-      expect(() =>
-        service['verificarPermisosSolicitud'](solicitud, {
-          rol: RolUsuario.FUNCIONARIO_MUNICIPAL,
-          municipio: 'La Habana',
-        }),
-      ).not.toThrow();
-    });
-
-    it('should throw ForbiddenException for FUNCIONARIO_MUNICIPAL with different municipio', () => {
-      const solicitud = {
-        solicitante: { usuario: { municipio: 'La Habana' } },
-      };
-      expect(() =>
-        service['verificarPermisosSolicitud'](solicitud, {
-          rol: RolUsuario.FUNCIONARIO_MUNICIPAL,
-          municipio: 'Otro',
-        }),
-      ).toThrow(ForbiddenException);
-    });
-
-    it('should verify permisos for COMISION_OTORGAMIENTO', () => {
-      const solicitud = {
-        solicitante: { usuario: { municipio: 'La Habana' } },
-      };
-      expect(() =>
-        service['verificarPermisosSolicitud'](solicitud, {
+      await expect(
+        service.cambiarEstado('s1', EstadoSolicitud.APROBADA_COMISION, {
+          id: 'u1',
           rol: RolUsuario.COMISION_OTORGAMIENTO,
-          municipio: 'La Habana',
-        }),
-      ).not.toThrow();
+          municipio: 'Playa',
+        } as any),
+      ).rejects.toThrow(BadRequestException);
     });
 
-    it('should verify permisos for DIRECTOR_CIRCULO with same municipio', () => {
-      const solicitud = {
-        solicitante: { usuario: { municipio: 'La Habana' } },
-      };
-      expect(() =>
-        service['verificarPermisosSolicitud'](solicitud, {
-          rol: RolUsuario.DIRECTOR_CIRCULO,
-          perfil: { municipio: 'La Habana' },
-        }),
-      ).not.toThrow();
+    it('APROBADA_COMISION con círculo → crea matrícula y dispatch', async () => {
+      prisma.solicitud.findUnique.mockResolvedValue(makeSolicitud());
+      prisma.matricula.findUnique.mockResolvedValue(null);
+      prisma.matricula.create.mockResolvedValue({
+        id: 'm1',
+        folio: 'F1',
+        fechaOtorgamiento: new Date(),
+        fechaLimite: new Date(),
+      } as any);
+      prisma.perfilDirector.findUnique.mockResolvedValue({
+        usuario: {
+          id: 'dir',
+          email: 'd@x',
+          nombre: 'D',
+          apellidos: 'D',
+        },
+      } as any);
+      prisma.solicitud.update.mockResolvedValue(
+        makeSolicitud({ estado: 'APROBADA_COMISION' }),
+      );
+      prisma.usuario.findMany.mockResolvedValue([] as any);
+      prisma.notificacion.createMany.mockResolvedValue({ count: 0 } as any);
+
+      const r = await service.cambiarEstado(
+        's1',
+        EstadoSolicitud.APROBADA_COMISION,
+        {
+          id: 'u1',
+          rol: RolUsuario.COMISION_OTORGAMIENTO,
+          municipio: 'Playa',
+        } as any,
+      );
+
+      expect(r.estado).toBe(EstadoSolicitud.APROBADA_COMISION);
+      expect(prisma.matricula.create).toHaveBeenCalled();
+      expect(dispatcher.dispatch).toHaveBeenCalled();
     });
 
-    it('should throw ForbiddenException for DIRECTOR_CIRCULO with different municipio', () => {
-      const solicitud = {
-        solicitante: { usuario: { municipio: 'La Habana' } },
-      };
-      expect(() =>
-        service['verificarPermisosSolicitud'](solicitud, {
-          rol: RolUsuario.DIRECTOR_CIRCULO,
-          perfil: { municipio: 'Otro' },
-        }),
-      ).toThrow(ForbiddenException);
+    it('APROBADA_DIRECCION notifica a la comisión', async () => {
+      prisma.solicitud.findUnique.mockResolvedValue(makeSolicitud());
+      prisma.solicitud.update.mockResolvedValue(
+        makeSolicitud({ estado: 'APROBADA_DIRECCION' }),
+      );
+      prisma.usuario.findMany.mockResolvedValue([] as any);
+      prisma.notificacion.createMany.mockResolvedValue({ count: 0 } as any);
+
+      await service.cambiarEstado('s1', EstadoSolicitud.APROBADA_DIRECCION, {
+        id: 'u1',
+        rol: RolUsuario.FUNCIONARIO_MUNICIPAL,
+        municipio: 'Playa',
+      } as any);
+      expect(prisma.notificacion.createMany).toHaveBeenCalled();
+    });
+  });
+
+  // ── remove ────────────────────────────────────────────────
+  describe('remove', () => {
+    it('lanza NotFound si no existe', async () => {
+      prisma.solicitud.findUnique.mockResolvedValue(null);
+      await expect(
+        service.remove('s1', { id: 'u1', rol: RolUsuario.ADMINISTRADOR }),
+      ).rejects.toThrow(NotFoundException);
     });
 
-    it('should verify permisos for SOLICITANTE owner', () => {
-      const solicitud = { solicitanteId: 'solicitante-id' };
-      expect(() =>
-        service['verificarPermisosSolicitud'](solicitud, {
+    it('solicitante no puede borrar si no está EN_REVISION', async () => {
+      prisma.solicitud.findUnique.mockResolvedValue(
+        makeSolicitud({ estado: 'APROBADA_COMISION' }),
+      );
+      await expect(
+        service.remove('s1', {
+          id: 'u1',
           rol: RolUsuario.SOLICITANTE,
-          perfilId: 'solicitante-id',
+          perfilId: 'sol1',
         }),
-      ).not.toThrow();
+      ).rejects.toThrow(ConflictException);
     });
 
-    it('should throw ForbiddenException for SOLICITANTE not owner', () => {
-      const solicitud = { solicitanteId: 'solicitante-id' };
-      expect(() =>
-        service['verificarPermisosSolicitud'](solicitud, {
-          rol: RolUsuario.SOLICITANTE,
-          perfilId: 'other',
+    it('bloquea si hay decisiones o matrícula', async () => {
+      prisma.solicitud.findUnique.mockResolvedValue(makeSolicitud());
+      prisma.decisionSolicitud.count.mockResolvedValue(1);
+      await expect(
+        service.remove('s1', { id: 'u1', rol: RolUsuario.ADMINISTRADOR }),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('elimina en éxito', async () => {
+      prisma.solicitud.findUnique.mockResolvedValue(makeSolicitud());
+      prisma.decisionSolicitud.count.mockResolvedValue(0);
+      prisma.matricula.count.mockResolvedValue(0);
+      prisma.solicitud.delete.mockResolvedValue({} as any);
+      await service.remove('s1', { id: 'u1', rol: RolUsuario.ADMINISTRADOR });
+      expect(prisma.solicitud.delete).toHaveBeenCalled();
+    });
+  });
+
+  // ── getEstadisticas ───────────────────────────────────────
+  it('getEstadisticas filtra por municipio', async () => {
+    prisma.solicitud.findMany.mockResolvedValue([
+      makeSolicitud({ estado: 'EN_REVISION' }),
+      makeSolicitud({
+        id: 's2',
+        solicitanteId: 'sol2',
+        circulo: {
+          ...makeSolicitud().circulo,
+          municipioRel: { nombre: 'Cerro' },
+        },
+      }),
+    ] as any);
+
+    const r = await service.getEstadisticas({ municipio: 'Playa' });
+
+    expect(r.total).toBe(1);
+    expect(r.porEstado.EN_REVISION).toBe(1);
+  });
+
+  // ── helpers privados ──────────────────────────────────────
+  it('generarFolioUnico genera tras colisión', async () => {
+    prisma.matricula.findUnique
+      .mockResolvedValueOnce({ id: 'exists' } as any)
+      .mockResolvedValueOnce(null);
+    const folio = await (service as any).generarFolioUnico();
+    expect(folio).toMatch(/^MAT-\d{8}-\d{4}$/);
+  });
+
+  it('notificarPersonal no rompe si Prisma falla', async () => {
+    prisma.usuario.findMany.mockRejectedValue(new Error('boom'));
+    await expect(
+      (service as any).notificarPersonal(
+        RolUsuario.COMISION_OTORGAMIENTO,
+        'Playa',
+        't',
+        'm',
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  // ── findBySolicitanteId ───────────────────────────────────
+  it('findBySolicitanteId devuelve las solicitudes del solicitante', async () => {
+    prisma.solicitud.findMany.mockResolvedValue([makeSolicitud()] as any);
+    const r = await service.findBySolicitanteId('sol1');
+    expect(r).toHaveLength(1);
+    expect(prisma.solicitud.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { solicitanteId: 'sol1' } }),
+    );
+  });
+
+  // ── findByNinoId (happy path) ─────────────────────────────
+  it('findByNinoId devuelve las solicitudes del niño', async () => {
+    ninosService.findOne.mockResolvedValue({ solicitanteId: 'sol1' });
+    prisma.solicitud.findMany.mockResolvedValue([makeSolicitud()] as any);
+    const r = await service.findByNinoId('n1', {
+      rol: RolUsuario.SOLICITANTE,
+      perfilId: 'sol1',
+    });
+    expect(r).toHaveLength(1);
+  });
+
+  // ── cambiarEstado: RECHAZADA_COMISION ─────────────────────
+  it('cambiarEstado a RECHAZADA_COMISION dispara trazabilidad y evento', async () => {
+    prisma.solicitud.findUnique.mockResolvedValue(
+      makeSolicitud({ estado: EstadoSolicitud.APROBADA_DIRECCION }),
+    );
+    prisma.solicitud.update.mockResolvedValue(
+      makeSolicitud({ estado: EstadoSolicitud.RECHAZADA_COMISION }),
+    );
+    prisma.usuario.findMany.mockResolvedValue([] as any);
+    prisma.notificacion.createMany.mockResolvedValue({ count: 0 } as any);
+
+    await service.cambiarEstado(
+      's1',
+      EstadoSolicitud.RECHAZADA_COMISION,
+      {
+        id: 'u1',
+        rol: RolUsuario.COMISION_OTORGAMIENTO,
+        municipio: 'Playa',
+      } as any,
+      'No cumple requisitos',
+    );
+
+    expect(trazabilidad.crearTrazabilidadAutomatica).toHaveBeenCalledWith(
+      's1',
+      EstadoSolicitud.APROBADA_DIRECCION,
+      EstadoSolicitud.RECHAZADA_COMISION,
+      'u1',
+      'No cumple requisitos',
+      expect.anything(),
+    );
+    expect(dispatcher.dispatch).toHaveBeenCalled();
+  });
+
+  // ── verificarPermisosSolicitud: rol inválido ──────────────
+  it('rechaza rol desconocido', async () => {
+    prisma.solicitud.findUnique.mockResolvedValue(makeSolicitud());
+    await expect(
+      service.findOne('s1', { rol: 'ROL_INEXISTENTE' as any }),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  // ── obtenerMotivoDenegacion (vía findOne) ─────────────────
+  it('extrae motivoDenegacion cuando el comentario no es automático', async () => {
+    prisma.solicitud.findUnique.mockResolvedValue(
+      makeSolicitud({
+        estado: EstadoSolicitud.RECHAZADA_COMISION,
+        trazas: [
+          { comentario: 'Falta documentación del menor', fecha: new Date() },
+        ],
+      }),
+    );
+
+    const r = await service.findOne('s1', { rol: RolUsuario.ADMINISTRADOR });
+    expect(r.motivoDenegacion).toBe('Falta documentación del menor');
+  });
+
+  it('ignora comentarios automáticos (PREFIJO_COMENTARIO_AUTOMATICO)', async () => {
+    prisma.solicitud.findUnique.mockResolvedValue(
+      makeSolicitud({
+        estado: EstadoSolicitud.RECHAZADA_COMISION,
+        trazas: [{ comentario: 'Cambio de estado: X → Y', fecha: new Date() }],
+      }),
+    );
+
+    const r = await service.findOne('s1', { rol: RolUsuario.ADMINISTRADOR });
+    expect(r.motivoDenegacion).toBeNull();
+  });
+
+  // ── getEstadisticas sin filtro ────────────────────────────
+  it('getEstadisticas sin municipio cuenta todo', async () => {
+    prisma.solicitud.findMany.mockResolvedValue([
+      makeSolicitud({ estado: 'EN_REVISION', decisiones: [] }),
+      makeSolicitud({ estado: 'APROBADA_COMISION', decisiones: [] }),
+    ] as any);
+    const r = await service.getEstadisticas({});
+    expect(r.total).toBe(2);
+    expect(r.porEstado.EN_REVISION).toBe(1);
+    expect(r.porEstado.APROBADA_COMISION).toBe(1);
+  });
+
+    // ── updateNino sin recálculo ──────────────────────────────
+  it('updateNino sin cambios de caso no recalcula prioridad', async () => {
+    prisma.solicitud.findUnique
+      .mockResolvedValueOnce(makeSolicitud())
+      .mockResolvedValueOnce(makeSolicitud());
+    ninosService.update.mockResolvedValue({
+      casoEspecial: false,
+      tipoNecesidad: null,
+    });
+    priorityCalculator.calculatePriority.mockClear();
+
+    await service.updateNino(
+      's1',
+      { nombre: 'NuevoNombre' } as any,
+      { id: 'u1', rol: RolUsuario.ADMINISTRADOR } as any,
+    );
+
+    expect(priorityCalculator.calculatePriority).not.toHaveBeenCalled();
+  });
+
+  // ── update como SOLICITANTE ───────────────────────────────
+  it('SOLICITANTE solo puede actualizar sus propios campos permitidos', async () => {
+    prisma.solicitud.findUnique.mockResolvedValue(makeSolicitud());
+    prisma.solicitud.update.mockResolvedValue(makeSolicitud());
+
+    await service.update(
+      's1',
+      { observaciones: 'nueva obs' } as any,
+      { id: 'u1', rol: RolUsuario.SOLICITANTE, perfilId: 'sol1' } as any,
+    );
+
+    expect(prisma.solicitud.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ observaciones: 'nueva obs' }),
+      }),
+    );
+  });
+
+    // ── update: ramas por rol y estadoCambio ──────────────────
+  it('FUNCIONARIO actualiza estado y dispara trazabilidad + evento', async () => {
+    prisma.solicitud.findUnique.mockResolvedValue(makeSolicitud());
+    prisma.solicitud.update.mockResolvedValue(
+      makeSolicitud({ estado: 'APROBADA_DIRECCION' }),
+    );
+    prisma.usuario.findMany.mockResolvedValue([] as any);
+    prisma.notificacion.createMany.mockResolvedValue({ count: 0 } as any);
+
+    await service.update(
+      's1',
+      { estado: EstadoSolicitud.APROBADA_DIRECCION } as any,
+      { id: 'u1', rol: RolUsuario.FUNCIONARIO_MUNICIPAL, municipio: 'Playa' } as any,
+    );
+
+    expect(trazabilidad.crearTrazabilidadAutomatica).toHaveBeenCalled();
+    expect(dispatcher.dispatch).toHaveBeenCalled();
+  });
+
+  it('SOLICITANTE solo puede cambiar observaciones y circuloId', async () => {
+    prisma.solicitud.findUnique.mockResolvedValue(makeSolicitud());
+    prisma.solicitud.update.mockResolvedValue(makeSolicitud());
+
+    await service.update(
+      's1',
+      { observaciones: 'Nueva obs', circuloId: null } as any,
+      { id: 'u1', rol: RolUsuario.SOLICITANTE, perfilId: 'sol1' } as any,
+    );
+
+    expect(prisma.solicitud.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          observaciones: 'Nueva obs',
+          circuloId: null,
         }),
-      ).toThrow(ForbiddenException);
+      }),
+    );
+  });
+
+  it('COMISION puede fijar prioridad manualmente', async () => {
+    prisma.solicitud.findUnique.mockResolvedValue(makeSolicitud());
+    prisma.solicitud.update.mockResolvedValue(makeSolicitud({ prioridad: 999 }));
+
+    await service.update(
+      's1',
+      { prioridad: 999 } as any,
+      { id: 'u1', rol: RolUsuario.COMISION_OTORGAMIENTO, municipio: 'Playa' } as any,
+    );
+
+    expect(prisma.solicitud.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ prioridad: 999 }),
+      }),
+    );
+  });
+
+  // ── cambiarEstado: RECHAZADA_DIRECCION ────────────────────
+  it('cambiarEstado a RECHAZADA_DIRECCION funciona', async () => {
+    prisma.solicitud.findUnique.mockResolvedValue(makeSolicitud());
+    prisma.solicitud.update.mockResolvedValue(
+      makeSolicitud({ estado: EstadoSolicitud.RECHAZADA_DIRECCION }),
+    );
+    prisma.usuario.findMany.mockResolvedValue([] as any);
+    prisma.notificacion.createMany.mockResolvedValue({ count: 0 } as any);
+
+    const r = await service.cambiarEstado(
+      's1',
+      EstadoSolicitud.RECHAZADA_DIRECCION,
+      { id: 'u1', rol: RolUsuario.FUNCIONARIO_MUNICIPAL, municipio: 'Playa' } as any,
+      'Rechazada por dirección',
+    );
+    expect(r.estado).toBe(EstadoSolicitud.RECHAZADA_DIRECCION);
+  });
+
+  // ── cambiarEstado: APROBADA_COMISION con círculo distinto ─
+  it('APROBADA_COMISION con circuloId distinto reasigna la solicitud', async () => {
+    prisma.solicitud.findUnique.mockResolvedValue(
+      makeSolicitud({ circuloId: 'c1' }),
+    );
+    prisma.circuloInfantil.findUnique.mockResolvedValue({
+      id: 'c2',
+      nombre: 'Otro',
+      activo: true,
+      municipioRel: { nombre: 'Playa' },
+    } as any);
+    prisma.matricula.findUnique.mockResolvedValue(null);
+    prisma.matricula.create.mockResolvedValue({
+      id: 'm1',
+      folio: 'F1',
+      fechaOtorgamiento: new Date(),
+      fechaLimite: new Date(),
+    } as any);
+    prisma.perfilDirector.findUnique.mockResolvedValue(null);
+    prisma.solicitud.update.mockResolvedValue(
+      makeSolicitud({ estado: 'APROBADA_COMISION' }),
+    );
+    prisma.usuario.findMany.mockResolvedValue([] as any);
+    prisma.notificacion.createMany.mockResolvedValue({ count: 0 } as any);
+
+    await service.cambiarEstado(
+      's1',
+      EstadoSolicitud.APROBADA_COMISION,
+      { id: 'u1', rol: RolUsuario.COMISION_OTORGAMIENTO, municipio: 'Playa' } as any,
+      undefined,
+      'c2',
+    );
+
+    expect(prisma.solicitud.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ circuloId: 'c2' }),
+      }),
+    );
+  });
+
+  // ── DIRECTOR accede a su propia solicitud ────────────────
+  it('DIRECTOR accede a solicitud de su propio círculo', async () => {
+    prisma.solicitud.findUnique.mockResolvedValue(makeSolicitud());
+    await expect(
+      service.findOne('s1', {
+        rol: RolUsuario.DIRECTOR_CIRCULO,
+        perfil: { circuloId: 'c1' },
+      }),
+    ).resolves.toBeTruthy();
+  });
+
+  // ── remove como FUNCIONARIO del mismo municipio ───────────
+  it('FUNCIONARIO puede eliminar solicitud de su municipio', async () => {
+    prisma.solicitud.findUnique.mockResolvedValue(makeSolicitud());
+    prisma.decisionSolicitud.count.mockResolvedValue(0);
+    prisma.matricula.count.mockResolvedValue(0);
+    prisma.solicitud.delete.mockResolvedValue({} as any);
+
+    await service.remove('s1', {
+      id: 'u1',
+      rol: RolUsuario.FUNCIONARIO_MUNICIPAL,
+      municipio: 'Playa',
     });
 
-    it('should throw ForbiddenException for unknown role', () => {
-      const solicitud = {
-        solicitante: { usuario: { municipio: 'La Habana' } },
-      };
-      expect(() =>
-        service['verificarPermisosSolicitud'](solicitud, {
-          rol: 'UNKNOWN' as any,
-        }),
-      ).toThrow(ForbiddenException);
-    });
+    expect(prisma.solicitud.delete).toHaveBeenCalled();
+  });
 
-    it('should convert to ResponseDto', () => {
-      const dto = service['toResponseDto'](mockSolicitud);
-      expect(dto).toHaveProperty('id');
-      expect(dto).toHaveProperty('nino');
-      expect(dto).toHaveProperty('periodo');
-      expect(dto).toHaveProperty('solicitante');
-    });
+  // ── getEstadisticas con y sin decisiones ─────────────────
+  it('getEstadisticas cuenta conDecision y sinDecision', async () => {
+    prisma.solicitud.findMany.mockResolvedValue([
+      makeSolicitud({ estado: 'EN_REVISION', decisiones: [{ id: 'd1' }] }),
+      makeSolicitud({ estado: 'EN_REVISION', decisiones: [] }),
+    ] as any);
 
-    it('should throw error if solicitud missing required relations', () => {
-      const invalidSolicitud = {
-        id: '1',
-        nino: null,
-        solicitante: null,
-        periodo: null,
-      };
-      expect(() => service['toResponseDto'](invalidSolicitud)).toThrow(Error);
-    });
+    const r = await service.getEstadisticas({});
+    expect(r.conDecision).toBe(1);
+    expect(r.sinDecision).toBe(1);
+    expect(r.porcentajeConDecision).toBe(50);
+  });
+
+  // ── getEstadisticas: porSector y porTipo ─────────────────
+  it('getEstadisticas agrega porSector y porTipo', async () => {
+    prisma.solicitud.findMany.mockResolvedValue([
+      makeSolicitud({ sector: 'SALUD', tipoSolicitud: 'TRABAJADOR', decisiones: [] }),
+      makeSolicitud({
+        sector: 'EDUCACION',
+        tipoSolicitud: 'ESTUDIANTE',
+        decisiones: [],
+      }),
+    ] as any);
+
+    const r = await service.getEstadisticas({});
+    expect(r.porSector).toEqual({ SALUD: 1, EDUCACION: 1 });
+    expect(r.porTipo.TRABAJADOR).toBe(1);
+    expect(r.porTipo.ESTUDIANTE).toBe(1);
+  });
+
+  // ── notificarPersonal: usuarios coincidentes ─────────────
+  it('notificarPersonal crea notificaciones para usuarios del municipio', async () => {
+    prisma.usuario.findMany.mockResolvedValue([
+      { id: 'u1', municipioRel: { nombre: 'Playa' } },
+      { id: 'u2', municipioRel: { nombre: 'Cerro' } },
+    ] as any);
+    prisma.notificacion.createMany.mockResolvedValue({ count: 1 } as any);
+
+    await (service as any).notificarPersonal(
+      RolUsuario.FUNCIONARIO_MUNICIPAL,
+      'Playa',
+      't',
+      'm',
+    );
+
+    const arg = prisma.notificacion.createMany.mock.calls[0][0] as any;
+    expect(arg.data).toHaveLength(1);
+    expect(arg.data[0].usuarioId).toBe('u1');
   });
 });

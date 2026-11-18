@@ -16,8 +16,9 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
-    "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:cov:services": "jest --coverage --testPathPatterns=\"(auth\\.service|prioridad-calc|solicitud\\.service|notificaciones\\.service|perfiles\\.service)\\.spec\\.ts$\"",
+    "test:db:setup": "dotenv -e .env.test -- prisma db push --skip-generate",
+    "test:e2e": "jest --config=test/jest-e2e.json --runInBand"
   },
   "dependencies": {
     "@nestjs-modules/mailer": "^2.0.2",
@@ -58,11 +59,13 @@
     "@types/pg": "^8.16.0",
     "@types/supertest": "^6.0.2",
     "dotenv": "^17.2.3",
+    "dotenv-cli": "^11.1.0",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.2",
     "globals": "^16.0.0",
     "jest": "^30.0.0",
+    "jest-mock-extended": "^4.0.2",
     "prettier": "^3.4.2",
     "prisma": "^7.2.0",
     "source-map-support": "^0.5.21",

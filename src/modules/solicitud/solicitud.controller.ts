@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
@@ -40,6 +41,7 @@ import { UpdateSolicitudDto } from './dto/update-solicitud.dto';
 import { SolicitudResponseDto } from './dto/solicitud-response.dto';
 import { SolicitudListResponseDto } from './dto/solicitud-list-response.dto';
 import { UpdateNinoDto } from '../nino/index';
+import { CambiarEstadoDto } from './dto/cambiar-estado.dto';
 
 @ApiTags('Solicitudes')
 @ApiBearerAuth()
@@ -342,65 +344,38 @@ export class SolicitudController {
   )
   @ApiOperation({ summary: 'Cambiar estado de solicitud' })
   @ApiParam({ name: 'id', description: 'ID de la solicitud' })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        estado: {
-          type: 'string',
-          enum: Object.values(EstadoSolicitud),
-          example: 'APROBADA_COMISION',
-        },
-        comentario: {
-          type: 'string',
-          example: 'Aprobada por comisión',
-          nullable: true,
-        },
-        circuloId: {
-          type: 'string',
-          description:
-            'Círculo donde se otorga la plaza al aprobar por comisión',
-          nullable: true,
-        },
-      },
-      required: ['estado'],
-    },
-  })
+  @ApiBody({ type: CambiarEstadoDto })
   @ApiResponse({ status: 200, description: 'Estado actualizado' })
-  @ApiResponse({ status: 400, description: 'Estado requerido' })
   @ApiResponse({
     status: 400,
-    description:
-      'La solicitud no tiene un círculo asignado (requerido para aprobar por comisión)',
+    description: 'Datos inválidos (estado, circuloId)',
   })
-  @ApiResponse({ status: 404, description: 'Solicitud no encontrada' })
+  @ApiResponse({
+    status: 404,
+    description: 'Solicitud o círculo no encontrado',
+  })
   cambiarEstado(
     @Request() req,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body('estado') estado: EstadoSolicitud | 'APROBADA' | 'RECHAZADA',
-    @Body('comentario') comentario?: string,
-    @Body('circuloId') circuloId?: string,
+    @Body() dto: CambiarEstadoDto,
   ) {
-    if (!estado) {
-      throw new BadRequestException('El campo "estado" es requerido');
-    }
     const estadoNormalizado =
-      estado === 'APROBADA'
+      dto.estado === ('APROBADA' as any)
         ? req.user.rol === RolUsuario.COMISION_OTORGAMIENTO
           ? EstadoSolicitud.APROBADA_COMISION
           : EstadoSolicitud.APROBADA_DIRECCION
-        : estado === 'RECHAZADA'
+        : dto.estado === ('RECHAZADA' as any)
           ? req.user.rol === RolUsuario.COMISION_OTORGAMIENTO
             ? EstadoSolicitud.RECHAZADA_COMISION
             : EstadoSolicitud.RECHAZADA_DIRECCION
-          : estado;
+          : dto.estado;
 
     return this.solicitudService.cambiarEstado(
       id,
       estadoNormalizado,
       req.user,
-      comentario,
-      circuloId,
+      dto.comentario,
+      dto.circuloId,
     );
   }
 

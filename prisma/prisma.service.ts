@@ -5,7 +5,6 @@ import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { ConfigService } from '@nestjs/config';
 
-// Los tests de integración vacían tablas con deleteMany: nunca sobre una base real
 export function exigirBaseDePruebas(dbUrl?: string) {
   const nombre = new URL(dbUrl ?? 'postgresql://x/').pathname.slice(1);
   if (!/(^|[_-])test$/i.test(nombre)) {
@@ -20,8 +19,9 @@ export class PrismaService
   extends PrismaClient
   implements OnModuleInit, OnModuleDestroy
 {
+  private readonly pool: Pool;
+
   constructor(private configService: ConfigService) {
-    // Usa ConfigService para obtener DATABASE_URL
     const dbUrl = configService.get<string>('DATABASE_URL');
 
     if (process.env.JEST_WORKER_ID) {
@@ -30,19 +30,17 @@ export class PrismaService
 
     if (!dbUrl) {
       console.error('❌ ERROR: DATABASE_URL no está definida en .env');
-      // Muestra todas las variables relacionadas con DB
       console.log(
         'ConfigService DATABASE_URL:',
         configService.get('DATABASE_URL'),
       );
       console.log('process.env.DATABASE_URL:', process.env.DATABASE_URL);
-    } else {
-      // Oculta la contraseña en el log
+    } else if (!process.env.JEST_WORKER_ID) {
       const maskedUrl = dbUrl.replace(/:([^:@]+)@/, ':****@');
       console.log(`🔗 Usando DATABASE_URL: ${maskedUrl}`);
     }
 
-    // Crea un pool de PostgreSQL
+    // 1. Crear el pool como variable LOCAL (esto SÍ puede ir antes de super)
     const pool = new Pool({
       connectionString: dbUrl,
       max: 20,
@@ -50,20 +48,28 @@ export class PrismaService
       connectionTimeoutMillis: 2000,
     });
 
-    // Crea el adaptador
+    // 2. Crear el adapter con el pool
     const adapter = new PrismaPg(pool);
 
-    // Pasa el adaptador al constructor
+    // 3. Llamar a super() con el adapter
     super({
-      adapter: adapter,
-      log: ['query', 'info', 'warn', 'error'],
+      adapter,
+      log:
+        process.env.JEST_WORKER_ID || process.env.NODE_ENV === 'test'
+          ? ['warn', 'error']
+          : ['query', 'info', 'warn', 'error'],
     });
+
+    // 4. AHORA sí, asignar `this.pool` (después de super)
+    this.pool = pool;
   }
 
   async onModuleInit() {
     try {
       await this.$connect();
-      console.log('✅ Database connected successfully');
+      if (!process.env.JEST_WORKER_ID) {
+        console.log('✅ Database connected successfully');
+      }
     } catch (error) {
       console.error('❌ Database connection error:', error.message);
 
@@ -78,6 +84,9 @@ export class PrismaService
 
   async onModuleDestroy() {
     await this.$disconnect();
-    console.log('🔌 Database disconnected');
+    await this.pool.end();
+    if (!process.env.JEST_WORKER_ID) {
+      console.log('🔌 Database disconnected');
+    }
   }
 }

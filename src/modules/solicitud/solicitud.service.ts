@@ -43,6 +43,7 @@ import {
 } from '../../common/utils/date-utils.service';
 import { eliminarArchivosDocumentos } from '../documento/documento.service';
 import { mismoMunicipio } from '../../common/utils/municipio';
+import { isUUID } from 'class-validator';
 
 const PREFIJO_COMENTARIO_AUTOMATICO = 'Cambio de estado:';
 
@@ -667,6 +668,11 @@ export class SolicitudService {
     comentario?: string,
     circuloId?: string,
   ): Promise<SolicitudResponseDto> {
+    if (circuloId && !isUUID(circuloId)) {
+      throw new BadRequestException(
+        `El ID del círculo "${circuloId}" no es un UUID válido`,
+      );
+    }
     const solicitud = await this.prisma.solicitud.findUnique({
       where: { id },
       include: {

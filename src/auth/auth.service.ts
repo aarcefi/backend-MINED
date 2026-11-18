@@ -114,9 +114,14 @@ export class AuthService {
   }
 
   async register(registerDto: RegisterDto): Promise<RegisterResponseDto> {
-    await this.validacionFichaUnica.verificarCarnetIdentidad(
-      registerDto.datosSolicitante.carnetIdentidad,
-    );
+    if (!registerDto.datosSolicitante) {
+      throw new BadRequestException('Datos del solicitante son requeridos');
+    }
+    await this.validacionFichaUnica.verificarIdentidadCompleta({
+      carnetIdentidad: registerDto.datosSolicitante.carnetIdentidad,
+      nombre: registerDto.datosSolicitante.nombre,
+      apellidos: registerDto.datosSolicitante.apellidos,
+    });
 
     const existingUser = await this.usuariosService.findByEmail(
       registerDto.email,
@@ -130,10 +135,6 @@ export class AuthService {
     );
     if (existingCarnet) {
       throw new ConflictException('El carnet de identidad ya está registrado');
-    }
-
-    if (!registerDto.datosSolicitante) {
-      throw new BadRequestException('Datos del solicitante son requeridos');
     }
 
     const hashedPassword = await bcrypt.hash(registerDto.password, 10);
@@ -172,7 +173,11 @@ export class AuthService {
 
       const usuarioCompleto = await prisma.usuario.findUnique({
         where: { id: newUser.id },
-        include: { perfilSolicitante: true },
+        include: {
+          perfilSolicitante: true,
+          municipioRel: true,
+          provinciaRel: true,
+        },
       });
 
       if (!usuarioCompleto) throw new Error('Error al crear usuario');
@@ -271,7 +276,11 @@ export class AuthService {
       },
     });
 
-    await this.mailService.sendPasswordResetEmail(email, code);
+    await this.mailService
+      .sendPasswordResetEmail(email, code)
+      .catch((err) =>
+        this.logger.error('No se pudo enviar correo de reset', err),
+      );
     return { message: 'Si el email existe, recibirás un correo...' };
   }
 

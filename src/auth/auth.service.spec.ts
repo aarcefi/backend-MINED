@@ -1,502 +1,521 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/require-await */
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/unbound-method */
-import { Test, TestingModule } from '@nestjs/testing';
-import { AuthService } from './auth.service';
-import { PrismaService } from '../../prisma/prisma.service';
+/* eslint-disable @typescript-eslint/no-floating-promises */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+import { Test } from '@nestjs/testing';
+import {
+  UnauthorizedException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import * as bcrypt from 'bcrypt';
+import { AuthService } from './auth.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { UsuariosService } from '../modules/usuario/usuarios.service';
 import { PerfilesService } from '../modules/perfiles/perfiles.service';
 import { ValidacionIdentidadService } from '../modules/validacion-ficha-unica/validacion-ficha-unica.service';
-import * as bcrypt from 'bcrypt';
 import {
-  ConflictException,
-  UnauthorizedException,
-  BadRequestException,
-} from '@nestjs/common';
+  createPrismaMock,
+  PrismaMock,
+  setupTransaction,
+} from '../../test/prisma-mock';
 import { RolUsuario } from '@prisma/client';
 
 jest.mock('bcrypt');
 
 describe('AuthService', () => {
   let service: AuthService;
-  let prisma: PrismaService;
-  let jwtService: JwtService;
-  let configService: ConfigService;
-  let mailService: MailService;
-  let usuariosService: UsuariosService;
-  let validacionService: ValidacionIdentidadService;
-
-  const mockUser = {
-    id: 'user-id-1',
-    email: 'test@example.com',
-    password: 'hashed',
-    rol: RolUsuario.SOLICITANTE,
-    nombre: 'Test',
-    apellidos: 'User',
-    carnetIdentidad: '85010112345',
-    telefono: '+5351234567',
-    municipio: 'La Habana',
-    provincia: 'La Habana',
-    activo: true,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    refreshToken: null,
-    tokenExpiry: null,
-    resetPasswordCode: null,
-    resetPasswordExpiry: null,
-    perfilSolicitante: { id: 'profile-1' },
-    perfilFuncionario: null,
-    perfilComision: null,
-    perfilDirector: null,
-    notificaciones: [],
-  };
-
-  const mockPrisma = {
-    usuario: {
-      findUnique: jest.fn(),
-      findFirst: jest.fn(),
-      create: jest.fn(),
-      update: jest.fn(),
-    },
-    perfilSolicitante: {
-      create: jest.fn(),
-    },
-    $transaction: jest.fn().mockImplementation(async (cb) => cb(mockPrisma)),
-  };
-
-  const mockJwtService = {
-    signAsync: jest.fn().mockImplementation((payload, options) => {
-      if (options?.expiresIn === 604800) {
-        return Promise.resolve('refresh-token');
-      }
-      return Promise.resolve('access-token');
-    }),
-  };
-
-  const mockConfigService = {
-    get: jest.fn().mockImplementation((key) => {
-      if (key === 'JWT_EXPIRES_IN') return '3600';
-      if (key === 'JWT_REFRESH_EXPIRES_IN') return '604800';
-      return undefined;
-    }),
-  };
-
-  const mockMailService = {
-    sendPasswordResetEmail: jest.fn(),
-  };
-
-  const mockUsuariosService = {
-    findByEmail: jest.fn(),
-    findByCarnet: jest.fn(),
-    updateRefreshToken: jest.fn().mockResolvedValue({ message: 'ok' }),
-    clearRefreshToken: jest.fn().mockResolvedValue({ message: 'ok' }),
-    getProfile: jest.fn().mockResolvedValue(mockUser),
-  };
-
-  const mockPerfilesService = {
-    findPerfilByUsuarioId: jest.fn().mockResolvedValue({
-      usuario: mockUser,
-      notificaciones: [],
-      ...mockUser.perfilSolicitante,
-    }),
-  };
-
-  const mockValidacionService = {
-    verificarCarnetIdentidad: jest.fn().mockResolvedValue(true),
-  };
+  let prisma: PrismaMock;
+  let usuariosService: any;
+  let perfilesService: any;
+  let validacion: any;
+  let mailService: any;
+  let jwtService: any;
+  let configService: any;
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
+    prisma = createPrismaMock();
+    setupTransaction(prisma);
+
+    usuariosService = {
+      updateRefreshToken: jest.fn(),
+      clearRefreshToken: jest.fn(),
+      findByEmail: jest.fn(),
+      findByCarnet: jest.fn(),
+      getProfile: jest.fn(),
+    };
+    perfilesService = { findPerfilByUsuarioId: jest.fn() };
+    validacion = { verificarCarnetIdentidad: jest.fn() };
+    mailService = { sendPasswordResetEmail: jest.fn() };
+    jwtService = {
+      signAsync: jest.fn().mockResolvedValue('token'),
+    };
+    configService = { get: jest.fn((_k, d) => d) };
+
+    const module = await Test.createTestingModule({
       providers: [
         AuthService,
-        { provide: PrismaService, useValue: mockPrisma },
-        { provide: JwtService, useValue: mockJwtService },
-        { provide: ConfigService, useValue: mockConfigService },
-        { provide: MailService, useValue: mockMailService },
-        { provide: UsuariosService, useValue: mockUsuariosService },
-        { provide: PerfilesService, useValue: mockPerfilesService },
-        {
-          provide: ValidacionIdentidadService,
-          useValue: mockValidacionService,
-        },
+        { provide: PrismaService, useValue: prisma },
+        { provide: JwtService, useValue: jwtService },
+        { provide: ConfigService, useValue: configService },
+        { provide: MailService, useValue: mailService },
+        { provide: UsuariosService, useValue: usuariosService },
+        { provide: PerfilesService, useValue: perfilesService },
+        { provide: ValidacionIdentidadService, useValue: validacion },
       ],
     }).compile();
 
-    service = module.get<AuthService>(AuthService);
-    prisma = module.get<PrismaService>(PrismaService);
-    jwtService = module.get<JwtService>(JwtService);
-    configService = module.get<ConfigService>(ConfigService);
-    mailService = module.get<MailService>(MailService);
-    usuariosService = module.get<UsuariosService>(UsuariosService);
-    validacionService = module.get<ValidacionIdentidadService>(
-      ValidacionIdentidadService,
-    );
+    service = module.get(AuthService);
   });
 
   afterEach(() => {
     jest.clearAllMocks();
   });
 
+  // ── validateUser ────────────────────────────────────────────
   describe('validateUser', () => {
-    it('should return user without password if credentials are correct', async () => {
-      mockPrisma.usuario.findUnique.mockResolvedValueOnce(mockUser);
-      (bcrypt.compare as jest.Mock).mockResolvedValueOnce(true);
-
-      const result = await service.validateUser('test@example.com', 'password');
-      expect(result).toHaveProperty('id', mockUser.id);
-      expect(result).not.toHaveProperty('password');
+    it('devuelve null si el usuario no existe', async () => {
+      prisma.usuario.findUnique.mockResolvedValue(null);
+      await expect(service.validateUser('x@y.z', 'pw')).resolves.toBeNull();
     });
 
-    it('should return null if user not found', async () => {
-      mockPrisma.usuario.findUnique.mockResolvedValueOnce(null);
-      const result = await service.validateUser('notfound@example.com', 'pass');
-      expect(result).toBeNull();
+    it('devuelve null si la contraseña no coincide', async () => {
+      prisma.usuario.findUnique.mockResolvedValue({
+        id: 'u1',
+        password: 'h',
+      } as any);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+      await expect(service.validateUser('x@y.z', 'bad')).resolves.toBeNull();
     });
 
-    it('should return null if password is incorrect', async () => {
-      mockPrisma.usuario.findUnique.mockResolvedValueOnce(mockUser);
-      (bcrypt.compare as jest.Mock).mockResolvedValueOnce(false);
-      const result = await service.validateUser('test@example.com', 'wrong');
-      expect(result).toBeNull();
+    it('devuelve el usuario sin password cuando es válido', async () => {
+      prisma.usuario.findUnique.mockResolvedValue({
+        id: 'u1',
+        email: 'x@y.z',
+        password: 'h',
+        rol: RolUsuario.SOLICITANTE,
+      } as any);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      const r = await service.validateUser('x@y.z', 'pw');
+      expect(r).not.toHaveProperty('password');
+      expect(r?.id).toBe('u1');
     });
   });
 
+  // ── login ───────────────────────────────────────────────────
   describe('login', () => {
-    it('should return tokens and user response on successful login', async () => {
-      const loginDto = { email: 'test@example.com', password: 'password' };
+    it('lanza Unauthorized si credenciales inválidas', async () => {
+      jest.spyOn(service, 'validateUser').mockResolvedValue(null);
+      await expect(
+        service.login({ email: 'a', password: 'b' } as any),
+      ).rejects.toThrow(UnauthorizedException);
+    });
 
-      const result = await service.login(loginDto);
-      expect(result).toHaveProperty('tokens');
-      expect(result).toHaveProperty('user');
-      expect(result.user).toHaveProperty('id', mockUser.id);
+    it('devuelve tokens y persiste refresh token', async () => {
+      jest.spyOn(service, 'validateUser').mockResolvedValue({
+        id: 'u1',
+        email: 'a@b.c',
+        rol: RolUsuario.SOLICITANTE,
+        nombre: 'N',
+        apellidos: 'A',
+        carnetIdentidad: '123',
+        telefono: '5',
+        perfilSolicitante: { id: 'ps1' },
+        municipioRel: { nombre: 'Plaza' },
+        provinciaRel: { nombre: 'La Habana' },
+      } as any);
+
+      const r = await service.login({ email: 'a', password: 'b' } as any);
+      expect(r.tokens).toHaveProperty('accessToken');
+      expect(r.tokens).toHaveProperty('refreshToken');
       expect(usuariosService.updateRefreshToken).toHaveBeenCalledWith(
-        mockUser.id,
-        'refresh-token',
+        'u1',
+        'token',
+      );
+      expect(r.user.id).toBe('u1');
+    });
+  });
+
+  // ── register ────────────────────────────────────────────────
+  describe('register', () => {
+    const buildDto = (over: any = {}) => ({
+      email: 'a@b.c',
+      password: 'pw',
+      datosSolicitante: {
+        nombre: 'N',
+        apellidos: 'A',
+        carnetIdentidad: '123',
+        telefono: '5',
+        direccion: 'Calle X',
+        municipio: 'Plaza',
+        provincia: 'La Habana',
+        tipoPersona: 'MADRE',
+        centroTrabajo: 'H',
+        ...over,
+      },
+    });
+
+    it('lanza Conflict si el email ya existe', async () => {
+      usuariosService.findByEmail.mockResolvedValue({ id: 'x' });
+      await expect(service.register(buildDto() as any)).rejects.toThrow(
+        ConflictException,
       );
     });
 
-    it('should throw UnauthorizedException if validation fails', async () => {
-      const loginDto = { email: 'test@example.com', password: 'wrong' };
-      jest.spyOn(service, 'validateUser').mockResolvedValueOnce(null);
-      await expect(service.login(loginDto)).rejects.toThrow(
+    it('lanza Conflict si el carnet ya existe', async () => {
+      usuariosService.findByEmail.mockResolvedValue(null);
+      usuariosService.findByCarnet.mockResolvedValue({ id: 'x' });
+      await expect(service.register(buildDto() as any)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('lanza BadRequest si falta datosSolicitante', async () => {
+      usuariosService.findByEmail.mockResolvedValue(null);
+      usuariosService.findByCarnet.mockResolvedValue(null);
+      await expect(
+        service.register({ email: 'x', password: 'y' } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('crea usuario + perfil en éxito', async () => {
+      usuariosService.findByEmail.mockResolvedValue(null);
+      usuariosService.findByCarnet.mockResolvedValue(null);
+      (bcrypt.hash as jest.Mock).mockResolvedValue('hashed');
+
+      prisma.municipio.findFirst.mockResolvedValue({
+        id: 'm1',
+        provinciaId: 'p1',
+      } as any);
+      prisma.usuario.create.mockResolvedValue({ id: 'u1' } as any);
+      prisma.perfilSolicitante.create.mockResolvedValue({} as any);
+      prisma.usuario.findUnique.mockResolvedValue({
+        id: 'u1',
+        email: 'a@b.c',
+        password: 'hashed',
+        rol: RolUsuario.SOLICITANTE,
+        nombre: 'N',
+        apellidos: 'A',
+        carnetIdentidad: '123',
+        telefono: '5',
+        perfilSolicitante: { id: 'ps1' },
+      } as any);
+
+      const r = await service.register(buildDto() as any);
+      expect(r.id).toBe('u1');
+      expect(prisma.usuario.create).toHaveBeenCalled();
+      expect(prisma.perfilSolicitante.create).toHaveBeenCalled();
+    });
+  });
+
+  // ── refreshTokens ───────────────────────────────────────────
+  describe('refreshTokens', () => {
+    it('lanza Unauthorized si no existe el usuario', async () => {
+      prisma.usuario.findUnique.mockResolvedValue(null);
+      await expect(service.refreshTokens('u1', 'rt')).rejects.toThrow(
         UnauthorizedException,
       );
     });
+
+    it('lanza Unauthorized si no hay refreshToken guardado', async () => {
+      prisma.usuario.findUnique.mockResolvedValue({
+        id: 'u1',
+        refreshToken: null,
+      } as any);
+      await expect(service.refreshTokens('u1', 'rt')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('lanza Unauthorized si bcrypt falla', async () => {
+      prisma.usuario.findUnique.mockResolvedValue({
+        id: 'u1',
+        refreshToken: 'hashed',
+        rol: RolUsuario.SOLICITANTE,
+      } as any);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+      await expect(service.refreshTokens('u1', 'rt')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('regenera tokens en éxito', async () => {
+      prisma.usuario.findUnique.mockResolvedValue({
+        id: 'u1',
+        refreshToken: 'hashed',
+        rol: RolUsuario.SOLICITANTE,
+        perfilSolicitante: { id: 'ps1' },
+      } as any);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+      const r = await service.refreshTokens('u1', 'rt');
+      expect(r).toHaveProperty('accessToken');
+      expect(usuariosService.updateRefreshToken).toHaveBeenCalled();
+    });
   });
 
-  describe('register', () => {
-    const registerDto = {
-      email: 'new@example.com',
-      password: 'password123',
-      datosSolicitante: {
-        carnetIdentidad: '85010112345',
-        nombre: 'New',
-        apellidos: 'User',
-        telefono: '+5351234567',
-        municipio: 'Habana',
-        provincia: 'Habana',
-        tipoPersona: 'MADRE' as any,
-        cantHijos: 1,
-        direccion: 'Calle 123',
-        centroTrabajo: 'Oficina',
-      },
+  // ── getProfile ──────────────────────────────────────────────
+  describe('getProfile', () => {
+    [
+      RolUsuario.SOLICITANTE,
+      RolUsuario.FUNCIONARIO_MUNICIPAL,
+      RolUsuario.COMISION_OTORGAMIENTO,
+      RolUsuario.DIRECTOR_CIRCULO,
+    ].forEach((rol) => {
+      it(`mapea perfil para ${rol}`, async () => {
+        perfilesService.findPerfilByUsuarioId.mockResolvedValue({
+          id: 'perfil1',
+          usuario: {
+            id: 'u1',
+            email: 'a@b.c',
+            rol,
+            nombre: 'N',
+            apellidos: 'A',
+            carnetIdentidad: '123',
+            telefono: '5',
+            municipioRel: { nombre: 'Plaza' },
+            provinciaRel: { nombre: 'La Habana' },
+          },
+          notificaciones: [],
+        });
+
+        const r = await service.getProfile('u1');
+        expect(r.id).toBe('u1');
+      });
+    });
+
+    it('cae al fallback cuando no hay perfil específico', async () => {
+      perfilesService.findPerfilByUsuarioId.mockResolvedValue(null);
+      usuariosService.getProfile.mockResolvedValue({
+        id: 'u1',
+        email: 'a@b.c',
+        rol: RolUsuario.ADMINISTRADOR,
+        nombre: 'N',
+        apellidos: 'A',
+        carnetIdentidad: '123',
+        telefono: '5',
+        municipioRel: { nombre: 'Plaza' },
+        provinciaRel: { nombre: 'La Habana' },
+      });
+
+      const r = await service.getProfile('u1');
+      expect(r.rol).toBe(RolUsuario.ADMINISTRADOR);
+    });
+  });
+
+  // ── logout ──────────────────────────────────────────────────
+  it('logout delega a clearRefreshToken', async () => {
+    usuariosService.clearRefreshToken.mockResolvedValue({ message: 'ok' });
+    await service.logout('u1');
+    expect(usuariosService.clearRefreshToken).toHaveBeenCalledWith('u1');
+  });
+
+  // ── forgotPassword ──────────────────────────────────────────
+  describe('forgotPassword', () => {
+    it('devuelve mensaje genérico si no existe', async () => {
+      usuariosService.findByEmail.mockResolvedValue(null);
+      const r = await service.forgotPassword('x@y.z');
+      expect(r.message).toContain('Si el email existe');
+    });
+
+    it('guarda código y envía correo si existe', async () => {
+      usuariosService.findByEmail.mockResolvedValue({ id: 'u1' });
+      prisma.usuario.update.mockResolvedValue({} as any);
+      mailService.sendPasswordResetEmail.mockResolvedValue(undefined);
+      await service.forgotPassword('a@b.c');
+      expect(prisma.usuario.update).toHaveBeenCalled();
+      expect(mailService.sendPasswordResetEmail).toHaveBeenCalled();
+    });
+  });
+
+  // ── resetPassword ───────────────────────────────────────────
+  describe('resetPassword', () => {
+    it('lanza Unauthorized si el token no existe', async () => {
+      prisma.usuario.findFirst.mockResolvedValue(null);
+      await expect(service.resetPassword('bad', 'new')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('actualiza password en éxito', async () => {
+      prisma.usuario.findFirst.mockResolvedValue({ id: 'u1' } as any);
+      (bcrypt.hash as jest.Mock).mockResolvedValue('hashed');
+      prisma.usuario.update.mockResolvedValue({} as any);
+      await service.resetPassword('good', 'new');
+      expect(prisma.usuario.update).toHaveBeenCalled();
+    });
+  });
+
+  // ── parseExpiresIn (cubierto vía login) ────────────────────
+  describe('parseExpiresIn (vía login)', () => {
+    const usuarioBase = {
+      id: 'u1',
+      email: 'a@b.c',
+      rol: RolUsuario.SOLICITANTE,
+      nombre: 'N',
+      apellidos: 'A',
+      carnetIdentidad: '123',
+      telefono: '5',
+      perfilSolicitante: { id: 'ps1' },
+      municipioRel: { nombre: 'Plaza' },
+      provinciaRel: { nombre: 'La Habana' },
     };
 
-    it('should throw ConflictException if email already exists', async () => {
-      mockUsuariosService.findByEmail.mockResolvedValueOnce({ id: 'existing' });
-      await expect(service.register(registerDto)).rejects.toThrow(
-        ConflictException,
+    it.each([
+      ['1h', 3600],
+      ['30m', 1800],
+      ['2d', 172800],
+      ['1w', 604800],
+    ])('interpreta JWT_EXPIRES_IN=%s como %i segundos', async (exp, seg) => {
+      jest.spyOn(service, 'validateUser').mockResolvedValue(usuarioBase as any);
+      // Solo la PRIMERA llamada a configService.get (access token) usa `exp`; la segunda usa default.
+      configService.get.mockReturnValueOnce(exp).mockReturnValueOnce('604800');
+
+      await service.login({ email: 'a', password: 'b' } as any);
+
+      expect(jwtService.signAsync).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({ expiresIn: seg }),
       );
     });
 
-    it('should throw ConflictException if carnet already registered', async () => {
-      mockUsuariosService.findByEmail.mockResolvedValueOnce(null);
-      mockUsuariosService.findByCarnet.mockResolvedValueOnce({
-        id: 'existing',
-      });
-      await expect(service.register(registerDto)).rejects.toThrow(
-        ConflictException,
-      );
-    });
+    it('usa 3600 por defecto si la unidad no es válida', async () => {
+      jest.spyOn(service, 'validateUser').mockResolvedValue(usuarioBase as any);
+      configService.get
+        .mockReturnValueOnce('1x') // unidad inválida
+        .mockReturnValueOnce('604800');
 
-    it('should throw BadRequestException if datosSolicitante missing', async () => {
-      mockUsuariosService.findByEmail.mockResolvedValueOnce(null);
-      mockUsuariosService.findByCarnet.mockResolvedValueOnce(null);
-      const dto = { ...registerDto, datosSolicitante: undefined };
-      await expect(service.register(dto as any)).rejects.toThrow(
-        BadRequestException,
-      );
-    });
+      await service.login({ email: 'a', password: 'b' } as any);
 
-    it('should register successfully and return user response', async () => {
-      mockUsuariosService.findByEmail.mockResolvedValueOnce(null);
-      mockUsuariosService.findByCarnet.mockResolvedValueOnce(null);
-      mockValidacionService.verificarCarnetIdentidad.mockResolvedValueOnce(
-        true,
-      );
-      (bcrypt.hash as jest.Mock).mockResolvedValueOnce('hashed');
-      mockPrisma.$transaction.mockImplementationOnce(async (cb) => {
-        const tx = mockPrisma;
-        tx.usuario.create = jest.fn().mockResolvedValueOnce({
-          id: 'new-user-id',
-          ...registerDto,
-          rol: RolUsuario.SOLICITANTE,
-          activo: true,
-        });
-        tx.perfilSolicitante.create = jest
-          .fn()
-          .mockResolvedValueOnce({ id: 'profile-1' });
-        tx.usuario.findUnique = jest.fn().mockResolvedValueOnce({
-          ...mockUser,
-          id: 'new-user-id',
-          email: registerDto.email,
-          carnetIdentidad: registerDto.datosSolicitante.carnetIdentidad,
-          perfilSolicitante: { id: 'profile-1' },
-        });
-        return cb(tx);
-      });
-
-      const result = await service.register(registerDto);
-      expect(result).toHaveProperty('id', 'new-user-id');
-      expect(result.email).toBe(registerDto.email);
-    });
-  });
-
-  describe('logout', () => {
-    it('should call clearRefreshToken and return message', async () => {
-      const result = await service.logout('user-id');
-      expect(usuariosService.clearRefreshToken).toHaveBeenCalledWith('user-id');
-      expect(result).toEqual({ message: 'Sesión cerrada exitosamente' });
-    });
-  });
-
-  describe('refreshTokens', () => {
-    it('should return new tokens if refresh token is valid', async () => {
-      const mockUserWithRefresh = {
-        ...mockUser,
-        refreshToken: 'hashed-refresh',
-      };
-      mockPrisma.usuario.findUnique.mockResolvedValueOnce(mockUserWithRefresh);
-      (bcrypt.compare as jest.Mock).mockResolvedValueOnce(true);
-
-      const result = await service.refreshTokens('user-id', 'refresh-token');
-      expect(result).toHaveProperty('accessToken');
-      expect(result).toHaveProperty('refreshToken');
-      expect(usuariosService.updateRefreshToken).toHaveBeenCalledWith(
-        'user-id',
-        'new-refresh',
-      );
-    });
-
-    it('should throw UnauthorizedException if user not found', async () => {
-      mockPrisma.usuario.findUnique.mockResolvedValueOnce(null);
-      await expect(service.refreshTokens('user-id', 'token')).rejects.toThrow(
-        UnauthorizedException,
-      );
-    });
-
-    it('should throw UnauthorizedException if user has no refresh token', async () => {
-      mockPrisma.usuario.findUnique.mockResolvedValueOnce({
-        ...mockUser,
-        refreshToken: null,
-      });
-      await expect(service.refreshTokens('user-id', 'token')).rejects.toThrow(
-        UnauthorizedException,
-      );
-    });
-
-    it('should throw UnauthorizedException if refresh token does not match', async () => {
-      const mockUserWithRefresh = {
-        ...mockUser,
-        refreshToken: 'hashed-refresh',
-      };
-      mockPrisma.usuario.findUnique.mockResolvedValueOnce(mockUserWithRefresh);
-      (bcrypt.compare as jest.Mock).mockResolvedValueOnce(false);
-      await expect(service.refreshTokens('user-id', 'token')).rejects.toThrow(
-        UnauthorizedException,
+      expect(jwtService.signAsync).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({ expiresIn: 3600 }),
       );
     });
   });
 
-  describe('getProfile', () => {
-    it('should return profile using PerfilesService if perfil exists', async () => {
-      const perfilData = {
-        usuario: mockUser,
+  // ── createUsuarioResponse con ADMINISTRADOR ────────────────
+  describe('createUsuarioResponse ADMINISTRADOR', () => {
+    it('no añade perfil cuando el rol es ADMINISTRADOR', async () => {
+      perfilesService.findPerfilByUsuarioId.mockResolvedValue(null);
+      usuariosService.getProfile.mockResolvedValue({
+        id: 'u1',
+        email: 'a@b.c',
+        rol: RolUsuario.ADMINISTRADOR,
+        nombre: 'N',
+        apellidos: 'A',
+        carnetIdentidad: '123',
+        telefono: '5',
+        municipioRel: { nombre: 'Plaza' },
+        provinciaRel: { nombre: 'La Habana' },
         notificaciones: [],
-        id: 'profile-1',
-        direccion: 'Calle',
-        centroTrabajo: 'Oficina',
-        tipoPersona: 'MADRE',
-        cantHijos: 1,
-      };
-      mockPerfilesService.findPerfilByUsuarioId.mockResolvedValueOnce(
-        perfilData,
-      );
-      const result = await service.getProfile('user-id');
-      expect(result).toHaveProperty('id', mockUser.id);
-      expect(result).toHaveProperty('perfilSolicitante');
-      expect(result.perfilSolicitante).toHaveProperty('direccion', 'Calle');
-    });
-
-    it('should fallback to UsuariosService.getProfile if no perfil found', async () => {
-      mockPerfilesService.findPerfilByUsuarioId.mockResolvedValueOnce(null);
-      mockUsuariosService.getProfile.mockResolvedValueOnce(mockUser);
-      const result = await service.getProfile('user-id');
-      expect(result).toHaveProperty('id', mockUser.id);
-      expect(result).not.toHaveProperty('perfilSolicitante');
-    });
-  });
-
-  describe('forgotPassword', () => {
-    it('should generate code and send email if user exists', async () => {
-      mockUsuariosService.findByEmail.mockResolvedValueOnce({
-        ...mockUser,
-        id: 'user-id',
       });
-      mockPrisma.usuario.update.mockResolvedValueOnce({});
-      const result = await service.forgotPassword('test@example.com');
-      expect(mailService.sendPasswordResetEmail).toHaveBeenCalled();
-      expect(result.message).toContain('Si el email existe');
-    });
 
-    it('should return generic message even if user not found (security)', async () => {
-      mockUsuariosService.findByEmail.mockResolvedValueOnce(null);
-      const result = await service.forgotPassword('nonexistent@example.com');
-      expect(mailService.sendPasswordResetEmail).not.toHaveBeenCalled();
-      expect(result.message).toContain('Si el email existe');
+      const r = await service.getProfile('u1');
+      expect(r.rol).toBe(RolUsuario.ADMINISTRADOR);
+      expect(r.perfilSolicitante).toBeUndefined();
+      expect(r.perfilFuncionario).toBeUndefined();
+      expect(r.perfilComision).toBeUndefined();
+      expect(r.perfilDirector).toBeUndefined();
     });
   });
 
-  describe('resetPassword', () => {
-    it('should reset password if token is valid', async () => {
-      const token = '123456';
-      const newPassword = 'newPass123';
-      const userWithToken = {
-        ...mockUser,
-        resetPasswordCode: token,
-        resetPasswordExpiry: new Date(Date.now() + 60000),
-      };
-      mockPrisma.usuario.findFirst.mockResolvedValueOnce(userWithToken);
-      (bcrypt.hash as jest.Mock).mockResolvedValueOnce('new-hashed');
-      mockPrisma.usuario.update.mockResolvedValueOnce({});
-      const result = await service.resetPassword(token, newPassword);
-      expect(result.message).toBe('Contraseña actualizada exitosamente');
-    });
+    // ── parseExpiresIn: unidad 's' y ADMINISTRADOR ─────────────
+  it('interpreta JWT_EXPIRES_IN con unidad "s"', async () => {
+    jest.spyOn(service, 'validateUser').mockResolvedValue({
+      id: 'u1',
+      email: 'a@b.c',
+      rol: RolUsuario.SOLICITANTE,
+      nombre: 'N',
+      apellidos: 'A',
+      carnetIdentidad: '123',
+      telefono: '5',
+      perfilSolicitante: { id: 'ps1' },
+      municipioRel: { nombre: 'Plaza' },
+      provinciaRel: { nombre: 'La Habana' },
+    } as any);
 
-    it('should throw UnauthorizedException if token invalid or expired', async () => {
-      mockPrisma.usuario.findFirst.mockResolvedValueOnce(null);
-      await expect(service.resetPassword('invalid', 'pass')).rejects.toThrow(
-        UnauthorizedException,
-      );
-    });
+    configService.get.mockReturnValueOnce('60s').mockReturnValueOnce('604800');
+
+    await service.login({ email: 'a', password: 'b' } as any);
+
+    expect(jwtService.signAsync).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ expiresIn: 60 }),
+    );
   });
 
-  describe('generateTokens (private)', () => {
-    it('should generate tokens with correct payload', async () => {
-      const spySign = jest.spyOn(jwtService, 'signAsync');
-      const tokens = await service['generateTokens'](mockUser);
-      expect(tokens).toHaveProperty('accessToken');
-      expect(tokens).toHaveProperty('refreshToken');
-      expect(spySign).toHaveBeenCalledTimes(2);
+  it('createUsuarioResponse no añade perfil cuando es ADMINISTRADOR', async () => {
+    perfilesService.findPerfilByUsuarioId.mockResolvedValue(null);
+    usuariosService.getProfile.mockResolvedValue({
+      id: 'u1',
+      email: 'a@b.c',
+      rol: RolUsuario.ADMINISTRADOR,
+      nombre: 'N',
+      apellidos: 'A',
+      carnetIdentidad: '123',
+      telefono: '5',
+      municipioRel: { nombre: 'Plaza' },
+      provinciaRel: { nombre: 'La Habana' },
+      notificaciones: [],
     });
 
-    it('should extract perfilId based on role', async () => {
-      const userWithPerfilFuncionario = {
-        ...mockUser,
-        rol: RolUsuario.FUNCIONARIO_MUNICIPAL,
-        perfilFuncionario: { id: 'func-profile' },
-      };
-      const tokens = await service['generateTokens'](userWithPerfilFuncionario);
-      expect(tokens).toBeDefined();
-    });
+    const r = await service.getProfile('u1');
+    expect(r.rol).toBe(RolUsuario.ADMINISTRADOR);
+    expect(r.perfilSolicitante).toBeUndefined();
+    expect(r.perfilFuncionario).toBeUndefined();
+    expect(r.perfilComision).toBeUndefined();
+    expect(r.perfilDirector).toBeUndefined();
   });
 
-  describe('updateRefreshToken (private)', () => {
-    it('should hash and store refresh token', async () => {
-      (bcrypt.hash as jest.Mock).mockResolvedValueOnce('hashed-refresh');
-      await service['updateRefreshToken']('user-id', 'refresh-token');
-      expect(mockPrisma.usuario.update).toHaveBeenCalledWith({
-        where: { id: 'user-id' },
-        data: expect.objectContaining({
-          refreshToken: 'hashed-refresh',
-          tokenExpiry: expect.any(Date),
-        }),
-      });
+  it('createUsuarioResponse incluye notificaciones si existen', async () => {
+    perfilesService.findPerfilByUsuarioId.mockResolvedValue({
+      id: 'perfil1',
+      usuario: {
+        id: 'u1',
+        email: 'a@b.c',
+        rol: RolUsuario.SOLICITANTE,
+        nombre: 'N',
+        apellidos: 'A',
+        carnetIdentidad: '123',
+        telefono: '5',
+        municipioRel: { nombre: 'Plaza' },
+        provinciaRel: { nombre: 'La Habana' },
+      },
+      notificaciones: [{ id: 'n1', mensaje: 'hola' }],
     });
+
+    const r = await service.getProfile('u1');
+    expect(r.notificaciones).toEqual([{ id: 'n1', mensaje: 'hola' }]);
   });
 
-  describe('createUsuarioResponse (private)', () => {
-    it('should format response for SOLICITANTE', () => {
-      const userWithPerfil = {
-        ...mockUser,
-        perfilSolicitante: {
-          id: 'p1',
-          usuarioId: 'u1',
-          direccion: 'Calle',
-          centroTrabajo: 'Oficina',
-          tipoPersona: 'MADRE',
-          cantHijos: 1,
-        },
-        notificaciones: [],
-      };
-      const response = service['createUsuarioResponse'](userWithPerfil);
-      expect(response).toHaveProperty('perfilSolicitante');
-      expect(response.perfilSolicitante).toHaveProperty('direccion', 'Calle');
-    });
-
-    it('should format response for FUNCIONARIO_MUNICIPAL', () => {
-      const user = {
-        ...mockUser,
-        rol: RolUsuario.FUNCIONARIO_MUNICIPAL,
-        perfilFuncionario: { id: 'p2', usuarioId: 'u1', cargo: 'Jefe' },
-      };
-      const response = service['createUsuarioResponse'](user);
-      expect(response).toHaveProperty('perfilFuncionario');
-      expect(response.perfilFuncionario).toHaveProperty('cargo', 'Jefe');
-    });
-
-    it('should format response for COMISION_OTORGAMIENTO', () => {
-      const user = {
-        ...mockUser,
-        rol: RolUsuario.COMISION_OTORGAMIENTO,
-        perfilComision: { id: 'p3', usuarioId: 'u1', cargo: 'Presidente' },
-      };
-      const response = service['createUsuarioResponse'](user);
-      expect(response).toHaveProperty('perfilComision');
-    });
-
-    it('should format response for DIRECTOR_CIRCULO', () => {
-      const user = {
-        ...mockUser,
+  it('createUsuarioResponse incluye el circulo cuando perfilDirector tiene circulo', async () => {
+    perfilesService.findPerfilByUsuarioId.mockResolvedValue({
+      id: 'perfil1',
+      usuario: {
+        id: 'u1',
+        email: 'a@b.c',
         rol: RolUsuario.DIRECTOR_CIRCULO,
-        perfilDirector: {
-          id: 'p4',
-          usuarioId: 'u1',
-          circuloId: 'c1',
-          circulo: { id: 'c1', nombre: 'Circulo' },
-        },
-      };
-      const response = service['createUsuarioResponse'](user);
-      expect(response).toHaveProperty('perfilDirector');
-      expect(response.perfilDirector).toHaveProperty('circulo');
+        nombre: 'N',
+        apellidos: 'A',
+        carnetIdentidad: '123',
+        telefono: '5',
+        municipioRel: { nombre: 'Plaza' },
+        provinciaRel: { nombre: 'La Habana' },
+      },
+      notificaciones: [],
+      circuloId: 'c1',
+      circulo: { id: 'c1', nombre: 'Mi Círculo' },
     });
 
-    it('should include notificaciones if present', () => {
-      const user = {
-        ...mockUser,
-        notificaciones: [{ id: 'n1', titulo: 'Test' }],
-      };
-      const response = service['createUsuarioResponse'](user);
-      expect(response).toHaveProperty('notificaciones');
-      expect(response.notificaciones).toHaveLength(1);
+    const r = await service.getProfile('u1');
+    expect(r.perfilDirector?.circulo).toEqual({
+      id: 'c1',
+      nombre: 'Mi Círculo',
     });
   });
 });
