@@ -1,5 +1,5 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
+/* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import {
@@ -20,7 +20,6 @@ import { EventDispatcher } from 'src/common/events/event-dispatcher.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { mismoMunicipio } from '../../common/utils/municipio';
 
-// Las respuestas llegan al navegador: nunca la contraseña ni los tokens de la familia
 const SECRETOS_USUARIO = {
   password: true,
   refreshToken: true,
@@ -92,34 +91,34 @@ export class MatriculasService {
 
     const folio = await this.generarFolioUnico();
 
-    const [matricula] = await this.prisma.$transaction([
-      this.prisma.matricula.create({
-        data: {
-          solicitudId: createMatriculaDto.solicitudId,
-          circuloId: createMatriculaDto.circuloId,
-          fechaOtorgamiento: new Date(createMatriculaDto.fechaOtorgamiento),
-          fechaLimite: new Date(createMatriculaDto.fechaLimite),
-          estado: createMatriculaDto.estado || EstadoMatricula.ACTIVA,
-          boletaUrl: createMatriculaDto.boletaUrl,
-          folio: folio,
-        },
-        include: {
-          solicitud: {
-            include: {
-              nino: { include: { solicitante: true } },
-              periodo: true,
-              solicitante: {
-                include: {
-                  usuario: { omit: SECRETOS_USUARIO },
-                },
+    // El trigger trg_matricula_capacidad recalcula cupos automáticamente
+    // tras este INSERT. No modificar capacidadCirculo aquí.
+    const matricula = await this.prisma.matricula.create({
+      data: {
+        solicitudId: createMatriculaDto.solicitudId,
+        circuloId: createMatriculaDto.circuloId,
+        fechaOtorgamiento: new Date(createMatriculaDto.fechaOtorgamiento),
+        fechaLimite: new Date(createMatriculaDto.fechaLimite),
+        estado: createMatriculaDto.estado || EstadoMatricula.ACTIVA,
+        boletaUrl: createMatriculaDto.boletaUrl,
+        folio: folio,
+      },
+      include: {
+        solicitud: {
+          include: {
+            nino: { include: { solicitante: true } },
+            periodo: true,
+            solicitante: {
+              include: {
+                usuario: { omit: SECRETOS_USUARIO },
               },
             },
           },
-          circulo: true,
-          controles: true,
         },
-      }),
-    ]);
+        circulo: true,
+        controles: true,
+      },
+    });
 
     if (matricula.estado !== EstadoMatricula.CANCELADA) {
       const solicitante = matricula.solicitud.solicitante;
@@ -351,35 +350,9 @@ export class MatriculasService {
     if (!matricula)
       throw new NotFoundException(`Matrícula con ID ${id} no encontrada`);
 
-    // Solo una matrícula ACTIVA ocupa plaza; las que esperan activación aún no
-    if (
-      data.estado === EstadoMatricula.CANCELADA &&
-      matricula.estado === EstadoMatricula.ACTIVA
-    ) {
-      const solicitud = await this.prisma.solicitud.findUnique({
-        where: { id: matricula.solicitudId },
-        select: { anioSolicitado: true },
-      });
-      if (solicitud) {
-        const capacidad = await this.prisma.capacidadCirculo.findUnique({
-          where: {
-            circuloId_anioVida: {
-              circuloId: matricula.circuloId,
-              anioVida: solicitud.anioSolicitado,
-            },
-          },
-        });
-        if (capacidad) {
-          await this.prisma.capacidadCirculo.update({
-            where: { id: capacidad.id },
-            data: {
-              cuposOcupados: { decrement: 1 },
-              cuposDisponibles: { increment: 1 },
-            },
-          });
-        }
-      }
-    }
+    // NOTA: los cupos de capacidadCirculo los recalcula el trigger
+    // trg_matricula_capacidad al hacer UPDATE sobre matriculas.
+    // No modificar capacidadCirculo aquí.
 
     const updateData: any = { ...data };
     if (data.fechaLimite) updateData.fechaLimite = new Date(data.fechaLimite);
@@ -420,31 +393,8 @@ export class MatriculasService {
       );
     }
 
-    if (matricula.estado === EstadoMatricula.ACTIVA) {
-      const solicitud = await this.prisma.solicitud.findUnique({
-        where: { id: matricula.solicitudId },
-        select: { anioSolicitado: true },
-      });
-      if (solicitud) {
-        const capacidad = await this.prisma.capacidadCirculo.findUnique({
-          where: {
-            circuloId_anioVida: {
-              circuloId: matricula.circuloId,
-              anioVida: solicitud.anioSolicitado,
-            },
-          },
-        });
-        if (capacidad) {
-          await this.prisma.capacidadCirculo.update({
-            where: { id: capacidad.id },
-            data: {
-              cuposOcupados: { decrement: 1 },
-              cuposDisponibles: { increment: 1 },
-            },
-          });
-        }
-      }
-    }
+    // NOTA: el trigger AFTER DELETE sobre matriculas recalcula cupos.
+    // No modificar capacidadCirculo aquí.
 
     await this.prisma.matricula.delete({ where: { id } });
     return { message: `Matrícula con ID ${id} eliminada exitosamente` };
@@ -680,6 +630,7 @@ export class MatriculasService {
 
   // El círculo pasa una matrícula de ACTIVA a CANCELADA o al revés.
   // Cancelar libera la plaza; reactivar la vuelve a ocupar si queda alguna.
+  // El trigger trg_matricula_capacidad recalcula los cupos automáticamente.
   async cambiarEstado(id: string, estado: EstadoMatricula, usuario: any) {
     const destinos: EstadoMatricula[] = [
       EstadoMatricula.ACTIVA,
@@ -695,7 +646,7 @@ export class MatriculasService {
       where: { id },
       include: {
         circulo: {
-          include: { municipioRel: true }, // <-- añadir
+          include: { municipioRel: true },
         },
         solicitud: {
           include: {
@@ -720,19 +671,23 @@ export class MatriculasService {
       );
     }
 
-    const capacidad = await this.prisma.capacidadCirculo.findUnique({
-      where: {
-        circuloId_anioVida: {
-          circuloId: matricula.circuloId,
-          anioVida: matricula.solicitud.anioSolicitado,
-        },
-      },
-    });
     const reactivar = estado === EstadoMatricula.ACTIVA;
-    if (reactivar && (!capacidad || capacidad.cuposDisponibles <= 0)) {
-      throw new ConflictException(
-        'No hay plazas disponibles en este año de vida para reactivar la matrícula',
-      );
+
+    // Validación previa: si vamos a activar y no hay cupos, fallar antes
+    if (reactivar) {
+      const capacidad = await this.prisma.capacidadCirculo.findUnique({
+        where: {
+          circuloId_anioVida: {
+            circuloId: matricula.circuloId,
+            anioVida: matricula.solicitud.anioSolicitado,
+          },
+        },
+      });
+      if (!capacidad || capacidad.cuposDisponibles <= 0) {
+        throw new ConflictException(
+          'No hay plazas disponibles en este año de vida para reactivar la matrícula',
+        );
+      }
     }
 
     const data: { estado: EstadoMatricula; fechaLimite?: Date } = { estado };
@@ -742,30 +697,13 @@ export class MatriculasService {
       data.fechaLimite = fechaLimite;
     }
 
-    const operaciones: any[] = [
-      this.prisma.matricula.update({
-        where: { id },
-        data,
-        include: { solicitud: { include: { nino: true } }, circulo: true },
-      }),
-    ];
-    if (capacidad && (reactivar || capacidad.cuposOcupados > 0)) {
-      operaciones.push(
-        this.prisma.capacidadCirculo.update({
-          where: { id: capacidad.id },
-          data: reactivar
-            ? {
-                cuposOcupados: { increment: 1 },
-                cuposDisponibles: { decrement: 1 },
-              }
-            : {
-                cuposOcupados: { decrement: 1 },
-                cuposDisponibles: { increment: 1 },
-              },
-        }),
-      );
-    }
-    const [actualizada] = await this.prisma.$transaction(operaciones);
+    // El trigger AFTER UPDATE sobre matriculas recalcula los cupos.
+    // Solo actualizamos la matrícula; el trigger hace el resto.
+    const actualizada = await this.prisma.matricula.update({
+      where: { id },
+      data,
+      include: { solicitud: { include: { nino: true } }, circulo: true },
+    });
 
     const usuarioSolicitante = matricula.solicitud.solicitante?.usuario;
     if (usuarioSolicitante) {
@@ -793,7 +731,7 @@ export class MatriculasService {
   private async verificarAccesoCirculo(
     matricula: {
       circuloId: string;
-      circulo: { municipioRel: { nombre: string } | null }; // <-- antes: { municipio: string }
+      circulo: { municipioRel: { nombre: string } | null };
     },
     usuario: any,
   ) {
@@ -809,10 +747,7 @@ export class MatriculasService {
     }
     if (
       usuario?.rol === RolUsuario.FUNCIONARIO_MUNICIPAL &&
-      !mismoMunicipio(
-        matricula.circulo.municipioRel?.nombre ?? null, // <-- antes: .municipio
-        usuario.municipio,
-      )
+      !mismoMunicipio(matricula.circulo.municipioRel?.nombre, usuario.municipio)
     ) {
       throw new ForbiddenException(
         'Solo puede gestionar matrículas de su municipio',
@@ -848,6 +783,7 @@ export class MatriculasService {
     const nuevaFechaLimite = new Date();
     nuevaFechaLimite.setFullYear(nuevaFechaLimite.getFullYear() + 1);
 
+    // Validación previa: no activar si no hay cupos
     const capacidad = await this.prisma.capacidadCirculo.findUnique({
       where: {
         circuloId_anioVida: {
@@ -862,31 +798,23 @@ export class MatriculasService {
       );
     }
 
-    const [matriculaActualizada] = await this.prisma.$transaction([
-      this.prisma.matricula.update({
-        where: { id },
-        data: {
-          estado: EstadoMatricula.ACTIVA,
-          fechaLimite: nuevaFechaLimite,
-        },
-        include: {
-          solicitud: {
-            include: {
-              nino: true,
-              solicitante: { include: { usuario: { omit: SECRETOS_USUARIO } } },
-            },
+    // El trigger AFTER UPDATE sobre matriculas recalcula los cupos.
+    const matriculaActualizada = await this.prisma.matricula.update({
+      where: { id },
+      data: {
+        estado: EstadoMatricula.ACTIVA,
+        fechaLimite: nuevaFechaLimite,
+      },
+      include: {
+        solicitud: {
+          include: {
+            nino: true,
+            solicitante: { include: { usuario: { omit: SECRETOS_USUARIO } } },
           },
-          circulo: true,
         },
-      }),
-      this.prisma.capacidadCirculo.update({
-        where: { id: capacidad.id },
-        data: {
-          cuposOcupados: { increment: 1 },
-          cuposDisponibles: { decrement: 1 },
-        },
-      }),
-    ]);
+        circulo: true,
+      },
+    });
 
     const solicitante = matriculaActualizada.solicitud.solicitante;
     const usuarioSolicitante = solicitante.usuario;
