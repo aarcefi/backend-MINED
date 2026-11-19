@@ -36,7 +36,7 @@ export class CapacidadCirculoController {
   constructor(private readonly capacidadService: CapacidadCirculoService) {}
 
   @Post()
-  @Roles(RolUsuario.ADMINISTRADOR, RolUsuario.FUNCIONARIO_MUNICIPAL)
+  @Roles(RolUsuario.ADMINISTRADOR)
   @ApiOperation({ summary: 'Crear nueva capacidad para círculo infantil' })
   @ApiResponse({ status: 201, description: 'Capacidad creada exitosamente' })
   @ApiResponse({ status: 400, description: 'Datos inválidos' })
@@ -121,7 +121,7 @@ export class CapacidadCirculoController {
   }
 
   @Patch(':id')
-  @Roles(RolUsuario.ADMINISTRADOR, RolUsuario.FUNCIONARIO_MUNICIPAL)
+  @Roles(RolUsuario.ADMINISTRADOR)
   @ApiOperation({ summary: 'Actualizar capacidad' })
   @ApiParam({ name: 'id', description: 'ID de la capacidad' })
   @ApiResponse({ status: 200, description: 'Capacidad actualizada' })
@@ -134,7 +134,7 @@ export class CapacidadCirculoController {
   }
 
   @Patch(':id/cupos')
-  @Roles(RolUsuario.ADMINISTRADOR, RolUsuario.FUNCIONARIO_MUNICIPAL)
+  @Roles(RolUsuario.ADMINISTRADOR)
   @ApiOperation({ summary: 'Actualizar cupos ocupados de una capacidad' })
   @ApiParam({ name: 'id', description: 'ID de la capacidad' })
   @ApiResponse({ status: 200, description: 'Cupos actualizados' })

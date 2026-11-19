@@ -25,6 +25,7 @@ import { RolesGuard } from '../../auth/guards/roles.guard';
 import { CirculoInfantilService } from './circulo-infantil.service';
 import { CreateCirculoInfantilDto } from './dto/create-circulo-infantil.dto';
 import { UpdateCirculoInfantilDto } from './dto/update-circulo-infantil.dto';
+import { ActualizarCapacidadesDto } from './dto/actualizar-capacidades.dto';
 import { GetUser } from 'src/auth/decorators/get-user.decorator';
 
 @ApiTags('Círculos Infantiles')
@@ -219,6 +220,39 @@ export class CirculoInfantilController {
     @GetUser() usuario: any,
   ) {
     return this.circuloService.getNiniosPorAnioVida(id, usuario);
+  }
+
+  @Patch(':id/capacidades')
+  @Roles(RolUsuario.ADMINISTRADOR, RolUsuario.DIRECTOR_CIRCULO)
+  @ApiOperation({
+    summary:
+      'Cambiar la capacidad por año de vida (el director, solo de su círculo)',
+  })
+  @ApiParam({ name: 'id', description: 'ID del círculo infantil' })
+  @ApiResponse({
+    status: 200,
+    description: 'Capacidades del círculo actualizadas',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Capacidades no válidas o suma mayor que la capacidad total',
+  })
+  @ApiResponse({ status: 403, description: 'El círculo no es del director' })
+  @ApiResponse({ status: 404, description: 'Círculo no encontrado' })
+  @ApiResponse({
+    status: 409,
+    description: 'Capacidad menor que los niños ya matriculados',
+  })
+  actualizarCapacidades(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ActualizarCapacidadesDto,
+    @GetUser() usuario: any,
+  ) {
+    return this.circuloService.actualizarCapacidades(
+      id,
+      dto.capacidades,
+      usuario,
+    );
   }
 
   @Patch(':id')

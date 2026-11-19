@@ -218,6 +218,23 @@ export class PerfilesController {
     return this.perfilesService.configurarPrioridadComision(req.user.id, dto);
   }
 
+  // El panel de la Comisión la usa para mostrar los sectores ya guardados
+  @Get('comision/prioridad')
+  @Roles(RolUsuario.COMISION_OTORGAMIENTO)
+  @ApiOperation({ summary: 'Obtener la configuración de prioridades' })
+  @ApiQuery({ name: 'periodoId', required: false, format: 'uuid' })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Con periodoId, la configuración de ese período (vacío si no hay); sin él, todas las de la comisión',
+  })
+  obtenerPrioridad(@Request() req, @Query('periodoId') periodoId?: string) {
+    return this.perfilesService.obtenerPrioridadComision(
+      req.user.id,
+      periodoId,
+    );
+  }
+
   @Get('comision/:usuarioId/estadisticas') //Solo para Admins
   @Roles(RolUsuario.ADMINISTRADOR)
   @ApiOperation({

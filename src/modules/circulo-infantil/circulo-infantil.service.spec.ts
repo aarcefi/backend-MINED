@@ -1,10 +1,11 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { AnioVida } from '@prisma/client';
+import { AnioVida, RolUsuario } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CirculoInfantilService } from './circulo-infantil.service';
 
@@ -47,6 +48,7 @@ describe('CirculoInfantilService', () => {
       delete: jest.fn(),
       deleteMany: jest.fn(),
     },
+    perfilDirector: { findUnique: jest.fn() },
     municipio: {
       findFirst: jest.fn().mockResolvedValue({ id: 'm1', provinciaId: 'p1' }),
     },
@@ -255,6 +257,74 @@ describe('CirculoInfantilService', () => {
       await expect(
         service.toggleActivo('c1', undefined as unknown as boolean),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('actualizarCapacidades', () => {
+    const director = { id: 'u-director', rol: RolUsuario.DIRECTOR_CIRCULO };
+
+    beforeEach(() => {
+      mockPrisma.circuloInfantil.findUnique.mockResolvedValue({
+        id: 'c1',
+        capacidadTotal: 50,
+        tieneSextoAnio: false,
+      });
+      cap.findMany.mockResolvedValue([]);
+    });
+
+    it('permite al director cambiar la capacidad de su círculo', async () => {
+      mockPrisma.perfilDirector.findUnique.mockResolvedValueOnce({
+        circuloId: 'c1',
+      });
+      await service.actualizarCapacidades(
+        'c1',
+        [{ anioVida: AnioVida.ANIO_2, capacidadTotal: 20 }],
+        director,
+      );
+      expect(cap.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          circuloId: 'c1',
+          anioVida: AnioVida.ANIO_2,
+          capacidadTotal: 20,
+        }),
+      });
+    });
+
+    it('no deja al director tocar otro círculo', async () => {
+      mockPrisma.perfilDirector.findUnique.mockResolvedValueOnce({
+        circuloId: 'otro',
+      });
+      await expect(
+        service.actualizarCapacidades(
+          'c1',
+          [{ anioVida: AnioVida.ANIO_2, capacidadTotal: 20 }],
+          director,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(cap.create).not.toHaveBeenCalled();
+    });
+
+    it('no deja superar la capacidad total del círculo', async () => {
+      mockPrisma.perfilDirector.findUnique.mockResolvedValueOnce({
+        circuloId: 'c1',
+      });
+      await expect(
+        service.actualizarCapacidades(
+          'c1',
+          [
+            { anioVida: AnioVida.ANIO_2, capacidadTotal: 30 },
+            { anioVida: AnioVida.ANIO_3, capacidadTotal: 30 },
+          ],
+          director,
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('devuelve 404 si el círculo no existe', async () => {
+      mockPrisma.circuloInfantil.findUnique.mockResolvedValueOnce(null);
+      await expect(
+        service.actualizarCapacidades('x', [], director),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 

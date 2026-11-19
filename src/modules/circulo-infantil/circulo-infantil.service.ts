@@ -428,6 +428,46 @@ export class CirculoInfantilService {
     };
   }
 
+  /**
+   * El director cambia cuántos niños admite su círculo en cada año de vida.
+   * Valida lo mismo que la edición del administrador: sin años repetidos, sin
+   * 6to año si el círculo no lo ofrece, sin bajar de los ya matriculados y sin
+   * pasar de la capacidad total del círculo.
+   */
+  async actualizarCapacidades(
+    id: string,
+    capacidades: CapacidadAnioDto[],
+    usuario: any,
+  ) {
+    const circulo = await this.prisma.circuloInfantil.findUnique({
+      where: { id },
+    });
+    if (!circulo)
+      throw new NotFoundException(`Círculo con ID ${id} no encontrado`);
+
+    if (usuario?.rol === RolUsuario.DIRECTOR_CIRCULO) {
+      const perfil = await this.prisma.perfilDirector.findUnique({
+        where: { usuarioId: usuario.id },
+      });
+      if (perfil?.circuloId !== id) {
+        throw new ForbiddenException(
+          'Solo puede cambiar la capacidad de su propio círculo',
+        );
+      }
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const actuales = await tx.capacidadCirculo.findMany({
+        where: { circuloId: id },
+      });
+      await this.sincronizarCapacidades(tx, circulo, actuales, capacidades);
+      return tx.capacidadCirculo.findMany({
+        where: { circuloId: id },
+        orderBy: { anioVida: 'asc' },
+      });
+    });
+  }
+
   async update(id: string, data: UpdateCirculoInfantilDto) {
     const circulo = await this.prisma.circuloInfantil.findUnique({
       where: { id },

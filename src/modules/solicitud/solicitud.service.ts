@@ -294,7 +294,11 @@ export class SolicitudService {
         },
         circulo: { include: { municipioRel: true, provinciaRel: true } },
         documentos: { where: { validado: true } },
-        matricula: { include: { circulo: true } },
+        matricula: {
+          include: {
+            circulo: { include: { municipioRel: true, provinciaRel: true } },
+          },
+        },
       },
       orderBy: [{ prioridad: 'desc' }, { fechaSolicitud: 'asc' }],
     });
@@ -317,7 +321,12 @@ export class SolicitudService {
         },
         circulo: { include: { municipioRel: true, provinciaRel: true } },
         documentos: { include: { validador: true } },
-        matricula: { include: { circulo: true, controles: true } },
+        matricula: {
+          include: {
+            circulo: { include: { municipioRel: true, provinciaRel: true } },
+            controles: true,
+          },
+        },
         trazas: {
           where: {
             estadoNuevo: {
@@ -356,7 +365,11 @@ export class SolicitudService {
         },
         circulo: { include: { municipioRel: true, provinciaRel: true } },
         documentos: true,
-        matricula: { include: { circulo: true } },
+        matricula: {
+          include: {
+            circulo: { include: { municipioRel: true, provinciaRel: true } },
+          },
+        },
       },
       orderBy: { fechaSolicitud: 'desc' },
     });
@@ -388,7 +401,11 @@ export class SolicitudService {
         },
         circulo: { include: { municipioRel: true, provinciaRel: true } },
         documentos: true,
-        matricula: { include: { circulo: true } },
+        matricula: {
+          include: {
+            circulo: { include: { municipioRel: true, provinciaRel: true } },
+          },
+        },
       },
       orderBy: { fechaSolicitud: 'desc' },
     });
@@ -416,7 +433,11 @@ export class SolicitudService {
         },
         circulo: { include: { municipioRel: true, provinciaRel: true } },
         documentos: true,
-        matricula: { include: { circulo: true } },
+        matricula: {
+          include: {
+            circulo: { include: { municipioRel: true, provinciaRel: true } },
+          },
+        },
       },
       orderBy: { prioridad: 'desc' },
     });
@@ -1097,6 +1118,21 @@ export class SolicitudService {
       : null;
   }
 
+  // Municipio y provincia salen de sus tablas; el frontend los recibe como texto
+  private circuloDto(circulo: any) {
+    if (!circulo) return null;
+    return {
+      id: circulo.id,
+      nombre: circulo.nombre,
+      direccion: circulo.direccion,
+      telefono: circulo.telefono ?? null,
+      municipio: circulo.municipioRel?.nombre ?? null,
+      provincia: circulo.provinciaRel?.nombre ?? null,
+      tipo: circulo.tipo,
+      tieneSextoAnio: circulo.tieneSextoAnio,
+    };
+  }
+
   private toResponseDto(solicitud: any): SolicitudResponseDto {
     if (!solicitud) {
       throw new Error('No se proporcionó una solicitud para mapear');
@@ -1154,17 +1190,7 @@ export class SolicitudService {
         municipio: solicitud.solicitante.usuario?.municipioRel?.nombre,
         provincia: solicitud.solicitante.usuario?.provinciaRel?.nombre,
       },
-      circulo: solicitud.circulo
-        ? {
-            id: solicitud.circulo.id,
-            nombre: solicitud.circulo.nombre,
-            direccion: solicitud.circulo.direccion,
-            municipio: solicitud.circulo.municipioRel?.nombre,
-            provincia: solicitud.circulo.provinciaRel?.nombre,
-            tipo: solicitud.circulo.tipo,
-            tieneSextoAnio: solicitud.circulo.tieneSextoAnio,
-          }
-        : null,
+      circulo: this.circuloDto(solicitud.circulo),
       documentos:
         solicitud.documentos?.map((doc) => ({
           id: doc.id,
@@ -1172,7 +1198,12 @@ export class SolicitudService {
           nombreArchivo: doc.nombreArchivo,
           validado: doc.validado,
         })) || [],
-      matricula: solicitud.matricula || null,
+      matricula: solicitud.matricula
+        ? {
+            ...solicitud.matricula,
+            circulo: this.circuloDto(solicitud.matricula.circulo),
+          }
+        : null,
       motivoDenegacion: this.obtenerMotivoDenegacion(solicitud),
     };
   }
